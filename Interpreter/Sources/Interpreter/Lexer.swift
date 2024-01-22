@@ -14,6 +14,7 @@ public enum Token: Equatable {
     case stringLiteral(String)
 }
 
+// TODO: Skip comments
 public enum Lexer {
     static let firstIdentChars = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     static let identChars = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"

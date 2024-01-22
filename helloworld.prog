@@ -1,3 +1,6 @@
+fn add(a: int, b: int) {}
+
 fn main() {
     print("Hello, world!")
+    print("This is a test!")
 }

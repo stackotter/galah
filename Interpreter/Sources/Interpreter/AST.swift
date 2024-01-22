@@ -8,6 +8,12 @@ public struct AST {
 
 public enum Decl {
     case fn(FnDecl)
+
+    var ident: String {
+        switch self {
+            case let .fn(decl): decl.ident
+        }
+    }
 }
 
 public struct FnDecl {
