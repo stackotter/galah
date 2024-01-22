@@ -3,13 +3,12 @@ func todo(_ message: String) -> Never {
     exit(1)
 }
 
-public enum AST {}
-
 public enum Interpreter {
     public static func run(_ code: String) throws {
         let tokens = try lex(code)
         print(tokens)
         let ast = try parse(tokens)
+        print(ast)
         todo("Run AST")
     }
 
@@ -18,6 +17,6 @@ public enum Interpreter {
     }
 
     public static func parse(_ tokens: [Token]) throws -> AST {
-        todo("Parse tokens")
+        try Parser.parse(tokens)
     }
 }

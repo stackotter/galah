@@ -2,22 +2,22 @@ public enum Keyword: String {
     case fn
 }
 
-public enum Token {
+public enum Token: Equatable {
     case ident(String)
     case leftParen
     case rightParen
     case leftBrace
     case rightBrace
+    case colon
+    case comma
     case keyword(Keyword)
     case stringLiteral(String)
 }
 
-public struct Lexer {
+public enum Lexer {
     static let firstIdentChars = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     static let identChars = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
     static let digitChars = "0123456789"
-
-    init() {}
 
     public static func lex(_ text: String) throws -> [Token] {
         var buffer = TextBuffer(text)
@@ -78,6 +78,10 @@ public struct Lexer {
                 tokens.append(.leftBrace)
             } else if c == "}" {
                 tokens.append(.rightBrace)
+            } else if c == ":" {
+                tokens.append(.colon)
+            } else if c == "," {
+                tokens.append(.comma)
             } else if c == " " || c == "\t" || c == "\r" || c == "\n" {
                 continue
             } else {
