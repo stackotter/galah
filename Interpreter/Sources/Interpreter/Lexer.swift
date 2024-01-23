@@ -1,5 +1,7 @@
 public enum Keyword: String {
     case fn
+    case `if`
+    case `else`
 }
 
 public enum Token: Equatable {
@@ -12,19 +14,32 @@ public enum Token: Equatable {
     case comma
     case keyword(Keyword)
     case stringLiteral(String)
+    case integerLiteral(Int)
+    case floatLiteral(Double)
+}
+
+public struct RichToken {
+    public var token: Token
+    public var location: Location
+
+    public init(_ token: Token, at location: Location) {
+        self.token = token
+        self.location = location
+    }
 }
 
 // TODO: Skip comments
 public enum Lexer {
-    static let firstIdentChars = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    static let identChars = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    static let digitChars = "0123456789"
+    static let firstIdentChars = Array("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    static let identChars = Array("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+    static let digitChars = Array("0123456789")
 
-    public static func lex(_ text: String) throws -> [Token] {
+    public static func lex(_ text: String) throws -> [RichToken] {
         var buffer = TextBuffer(text)
 
-        var tokens: [Token] = []
+        var tokens: [RichToken] = []
         while let c = buffer.next() {
+            let location = buffer.location
             if firstIdentChars.contains(c) {
                 var ident = String(c)
                 while let c = buffer.peek(), identChars.contains(c) {
@@ -33,9 +48,9 @@ public enum Lexer {
                 }
 
                 if let keyword = Keyword(rawValue: ident) {
-                    tokens.append(.keyword(keyword))
+                    tokens.append(RichToken(.keyword(keyword), at: location))
                 } else {
-                    tokens.append(.ident(ident))
+                    tokens.append(RichToken(.ident(ident), at: location))
                 }
             } else if c == "\"" {
                 let startLocation = buffer.location
@@ -69,20 +84,28 @@ public enum Lexer {
                     throw RichError("Unterminated string literal", at: startLocation)
                 } else {
                     buffer.next()
-                    tokens.append(.stringLiteral(content))
+                    tokens.append(RichToken(.stringLiteral(content), at: location))
                 }
+            } else if let digit = digitChars.firstIndex(of: c) {
+                var value = digit
+                while let c = buffer.peek(), let digit = digitChars.firstIndex(of: c) {
+                    buffer.next()
+                    value *= 10
+                    value += digit
+                }
+                tokens.append(RichToken(.integerLiteral(value), at: location))
             } else if c == "(" {
-                tokens.append(.leftParen)
+                tokens.append(RichToken(.leftParen, at: location))
             } else if c == ")" {
-                tokens.append(.rightParen)
+                tokens.append(RichToken(.rightParen, at: location))
             } else if c == "{" {
-                tokens.append(.leftBrace)
+                tokens.append(RichToken(.leftBrace, at: location))
             } else if c == "}" {
-                tokens.append(.rightBrace)
+                tokens.append(RichToken(.rightBrace, at: location))
             } else if c == ":" {
-                tokens.append(.colon)
+                tokens.append(RichToken(.colon, at: location))
             } else if c == "," {
-                tokens.append(.comma)
+                tokens.append(RichToken(.comma, at: location))
             } else if c == " " || c == "\t" || c == "\r" || c == "\n" {
                 continue
             } else {

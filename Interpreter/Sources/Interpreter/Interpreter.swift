@@ -19,53 +19,99 @@ public struct Interpreter {
             throw RichError("'main' function must not have any parameters")
         }
 
-        try interpreter.evaluate(main.stmts)
+        _ = try interpreter.evaluate(main.stmts, [:])
     }
 
     var decls: [String: Decl]
 
+    static let builtins: [String: BuiltinFn] = Self.dictionary(
+        of: [
+            BuiltinFn("add") { (a: Int, b: Int) in
+                a + b
+            },
+            BuiltinFn("sub") { (a: Int, b: Int) in
+                a - b
+            },
+            BuiltinFn("equals") { (a: Int, b: Int) in
+                a == b ? 1 : 0
+            },
+            BuiltinFn("not") { (x: Int) in
+                x == 0 ? 1 : 0
+            },
+            BuiltinFn("print") { (x: Any) in
+                print(x)
+            }
+        ],
+        keyedBy: \.ident
+    )
+
     public init(_ ast: AST) {
-        decls = [:]
-        for decl in ast.decls {
-            decls[decl.ident] = decl
-        }
+        decls = Self.dictionary(of: ast.decls, keyedBy: \.ident)
     }
 
-    public func evaluate(_ stmts: [Stmt]) throws {
-        for stmt in stmts {
-            try evaluate(stmt)
+    public func evaluate(_ stmts: [Stmt], _ locals: [String: Any]) throws -> Any {
+        for (i, stmt) in stmts.enumerated() {
+            let result = try evaluate(stmt, locals)
+            if i == stmts.count - 1 {
+                return result
+            }
         }
+        return Void()
     }
 
-    public func evaluate(_ stmt: Stmt) throws {
+    public func evaluate(_ stmt: Stmt, _ locals: [String: Any]) throws -> Any {
         switch stmt {
             case let .expr(expr):
-                _ = try evaluate(expr)
+                return try evaluate(expr, locals)
+            case let .if(ifStmt):
+                guard let condition = try evaluate(ifStmt.condition, locals) as? Int else {
+                    throw RichError("'if' conditions must be integers")
+                }
+
+                if condition != 0 {
+                    return try evaluate(ifStmt.ifBlock, locals)
+                } else {
+                    return try evaluate(ifStmt.elseBlock, locals)
+                }
         }
     }
 
-    public func evaluate(_ expr: Expr) throws -> Any {
+    public func evaluate(_ expr: Expr, _ locals: [String: Any]) throws -> Any {
         switch expr {
             case let .fnCall(fnCallExpr):
                 let arguments = try fnCallExpr.arguments.map { argument in
-                    try evaluate(argument)
+                    try evaluate(argument, locals)
                 }
-                switch fnCallExpr.ident {
-                    case "print":
-                        var argumentStrings: [String] = []
-                        for argument in arguments {
-                            argumentStrings.append("\(argument)")
-                        }
-                        print(argumentStrings.joined(separator: " "))
-                    default:
-                        guard case let .fn(fnDecl) = decls[fnCallExpr.ident] else {
-                            throw RichError("No such function '\(fnCallExpr.ident)'")
-                        }
-                        try evaluate(fnDecl.stmts)
+
+                if let builtin = Self.builtins[fnCallExpr.ident] {
+                    return try builtin.call(with: arguments)
+                } else {
+                    guard case let .fn(fnDecl) = decls[fnCallExpr.ident] else {
+                        throw RichError("No such function '\(fnCallExpr.ident)'")
+                    }
+                    var locals: [String: Any] = [:]
+                    for (ident, value) in zip(fnDecl.params.map(\.ident), arguments) {
+                        locals[ident] = value
+                    }
+                    return try evaluate(fnDecl.stmts, locals)
                 }
-                return Void()
+            case let .ident(ident):
+                guard let value = locals[ident] else {
+                    throw RichError("No such local variable '\(ident)'")
+                }
+                return value
+            case let .integerLiteral(value):
+                return value
             case let .stringLiteral(value):
                 return value
         }
+    }
+
+    public static func dictionary<T, K: Hashable>(of values: [T], keyedBy keyPath: KeyPath<T, K>) -> [K: T] {
+        var dictionary: [K: T] = [:]
+        for value in values {
+            dictionary[value[keyPath: keyPath]] = value
+        }
+        return dictionary
     }
 }

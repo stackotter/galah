@@ -29,11 +29,20 @@ public struct Param {
 
 public enum Stmt {
     case expr(Expr)
+    case `if`(IfStmt)
+}
+
+public struct IfStmt {
+    var condition: Expr
+    var ifBlock: [Stmt]
+    var elseBlock: [Stmt]
 }
 
 public enum Expr {
     case stringLiteral(String)
+    case integerLiteral(Int)
     case fnCall(FnCallExpr)
+    case ident(String)
 }
 
 public struct FnCallExpr {

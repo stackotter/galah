@@ -1,13 +1,13 @@
 public struct Parser {
-    let tokens: [Token]
+    let tokens: [RichToken]
     var index = 0
 
-    public static func parse(_ tokens: [Token]) throws -> AST {
+    public static func parse(_ tokens: [RichToken]) throws -> AST {
         let parser = Parser(tokens)
         return try parser.parse()
     }
 
-    private init(_ tokens: [Token]) {
+    private init(_ tokens: [RichToken]) {
         self.tokens = tokens
     }
 
@@ -19,7 +19,7 @@ public struct Parser {
                 case .keyword(.fn):
                     decls.append(.fn(try parseFnDecl()))
                 default:
-                    throw RichError("Unexpected token '\(token)' while parsing top-level declarations")
+                    throw RichError("Unexpected token '\(token)' while parsing top-level declarations", at: location())
             }
         }
 
@@ -51,38 +51,60 @@ public struct Parser {
         }
         try expect(.rightParen)
 
+        let stmts = try parseCodeBlock()
+        return FnDecl(ident: ident, params: params, stmts: stmts)
+    }
+
+    private mutating func parseStmt() throws -> Stmt {
+        if peek() == .keyword(.if) {
+            .if(try parseIfStmt())
+        } else {
+            .expr(try parseExpr())
+        }
+    }
+
+    private mutating func parseIfStmt() throws -> IfStmt {
+        try expect(.keyword(.if))
+        let condition = try parseExpr()
+        let ifBlock = try parseCodeBlock()
+        try expect(.keyword(.else))
+        let elseBlock = try parseCodeBlock()
+        return IfStmt(condition: condition, ifBlock: ifBlock, elseBlock: elseBlock)
+    }
+
+    private mutating func parseCodeBlock() throws -> [Stmt] {
         try expect(.leftBrace)
         var stmts: [Stmt] = []
         while let token = peek(), token != .rightBrace {
             stmts.append(try parseStmt())
         }
         try expect(.rightBrace)
-
-        return FnDecl(ident: ident, params: params, stmts: stmts)
-    }
-
-    private mutating func parseStmt() throws -> Stmt {
-        .expr(try parseExpr())
+        return stmts
     }
 
     private mutating func parseExpr() throws -> Expr {
         guard let token = next() else {
-            throw RichError("Unexpected EOF while parsing expression")
+            throw RichError("Unexpected EOF while parsing expression", at: location())
         }
 
         return switch token {
             case let .ident(ident):
-                .fnCall(
-                    FnCallExpr(
-                        ident: ident,
-                        arguments: try parseTuple().elements
+                if peek() == .leftParen {
+                    .fnCall(
+                        FnCallExpr(
+                            ident: ident,
+                            arguments: try parseTuple().elements
+                        )
                     )
-                )
+                } else {
+                    .ident(ident)
+                }
             case let .stringLiteral(value):
                 .stringLiteral(value)
+            case let .integerLiteral(value):
+                .integerLiteral(value)
             default:
-                print(index)
-                throw RichError("Unexpected token while parsing expression: \(token)")
+                throw RichError("Unexpected token while parsing expression: \(token)", at: location())
         }
     }
 
@@ -105,10 +127,15 @@ public struct Parser {
 
     private func peek() -> Token? {
         if index < tokens.count {
-            return tokens[index]
+            return tokens[index].token
         } else {
             return nil
         }
+    }
+
+    /// The location of the token most recently returned by ``Parser/next``.
+    private func location() -> Location {
+        return tokens[index - 1].location
     }
 
     @discardableResult
@@ -123,13 +150,13 @@ public struct Parser {
 
     private mutating func expect(_ token: Token) throws {
         guard let nextToken = next(), nextToken == token else {
-            throw RichError("Expected '\(token)'")
+            throw RichError("Expected '\(token)'", at: location())
         }
     }
 
     private mutating func expectIdent() throws -> String {
         guard case let .ident(ident) = next() else {
-            throw RichError("Expected ident")
+            throw RichError("Expected ident", at: location())
         }
         return ident
     }
