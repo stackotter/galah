@@ -7,8 +7,10 @@ struct TextBuffer {
     private var line = 1
     /// The column number of the character most recently returned by ``TextBuffer/next``.
     /// Column numbering starts at 1, but the location starts at 0 before the first
-    /// of the line character.
+    /// character of the first line.
     private var column = 0
+    /// Whether the latest character returned by ``TextBuffer/next`` was a newline or not.
+    private var previousWasNewLine = false
 
     /// The location of the character most recently returned by ``TextBuffer/next``.
     var location: Location {
@@ -35,12 +37,14 @@ struct TextBuffer {
         }
 
         if let character {
-            if character == "\n" {
+            if previousWasNewLine {
                 line += 1
-                column = 0
+                column = 1
+                previousWasNewLine = false
             } else {
                 column += 1
             }
+            previousWasNewLine = character.isNewline
         }
 
         return character

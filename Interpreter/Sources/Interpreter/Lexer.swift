@@ -4,6 +4,17 @@ public enum Keyword: String {
     case `else`
 }
 
+public enum Whitespace: Character {
+    case space = " "
+    case tab = "\t"
+    case newLine = "\n"
+}
+
+public enum Trivia: Equatable {
+    case whitespace(Whitespace)
+    case comment(String)
+}
+
 public enum Token: Equatable {
     case ident(String)
     case leftParen
@@ -16,9 +27,10 @@ public enum Token: Equatable {
     case stringLiteral(String)
     case integerLiteral(Int)
     case floatLiteral(Double)
+    case trivia(Trivia)
 }
 
-public struct RichToken {
+public struct RichToken: Equatable {
     public var token: Token
     public var location: Location
 
@@ -28,7 +40,6 @@ public struct RichToken {
     }
 }
 
-// TODO: Skip comments
 public enum Lexer {
     static let firstIdentChars = Array("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
     static let identChars = Array("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
@@ -75,6 +86,8 @@ public enum Lexer {
                         }
                         escapeNextChar = false
                         content.append(escapedChar)
+                    } else if c.isNewline {
+                        content.append("\n")
                     } else {
                         content.append(c)
                     }
@@ -106,8 +119,18 @@ public enum Lexer {
                 tokens.append(RichToken(.colon, at: location))
             } else if c == "," {
                 tokens.append(RichToken(.comma, at: location))
-            } else if c == " " || c == "\t" || c == "\r" || c == "\n" {
-                continue
+            } else if let whitespace = Whitespace(rawValue: c) {
+                tokens.append(RichToken(.trivia(.whitespace(whitespace)), at: location))
+            } else if c == "\r\n" {
+                tokens.append(RichToken(.trivia(.whitespace(.newLine)), at: location))
+            } else if c == "/" && buffer.peek() == "/" {
+                buffer.next()
+                var content = ""
+                while let c = buffer.peek(), !c.isNewline {
+                    buffer.next()
+                    content.append(c)
+                }
+                tokens.append(RichToken(.trivia(.comment(content)), at: location))
             } else {
                 throw RichError("Unexpected character '\(c)'", at: buffer.location)
             }

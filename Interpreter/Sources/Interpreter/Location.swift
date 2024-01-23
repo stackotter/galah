@@ -1,4 +1,4 @@
-public struct Location {
+public struct Location: Equatable {
     public var line: Int
     public var column: Int
 

@@ -1,6 +1,7 @@
 public struct Parser {
     let tokens: [RichToken]
     var index = 0
+    var previousIndex = 0
 
     public static func parse(_ tokens: [RichToken]) throws -> AST {
         let parser = Parser(tokens)
@@ -135,16 +136,25 @@ public struct Parser {
 
     /// The location of the token most recently returned by ``Parser/next``.
     private func location() -> Location {
-        return tokens[index - 1].location
+        return tokens[previousIndex].location
     }
 
     @discardableResult
     private mutating func next() -> Token? {
-        if let token = peek() {
+        while true {
+            guard let token = peek() else {
+                return nil
+            }
+
             index += 1
-            return token
-        } else {
-            return nil
+
+            guard case .trivia = token else {
+                previousIndex = index
+                while case .trivia = peek() {
+                    index += 1
+                }
+                return token
+            }
         }
     }
 

@@ -10,10 +10,8 @@ public struct RichError: Error, CustomStringConvertible {
         }
     }
 
-    public init(_ message: String, at location: Location? = nil, _ line: Int = #line, _ file: String = #file, _ column: Int = #column) {
+    public init(_ message: String, at location: Location? = nil) {
         self.message = message
         self.location = location
-
-        print("thrown from \(file)@\(line):\(column)")
     }
 }
