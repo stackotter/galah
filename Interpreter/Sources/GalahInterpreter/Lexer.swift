@@ -28,6 +28,32 @@ public enum Token: Equatable {
     case integerLiteral(Int)
     case floatLiteral(Double)
     case trivia(Trivia)
+
+    public var noun: String {
+        switch self {
+            case .ident: "an ident"
+            case .leftParen: "'('"
+            case .rightParen: "')'"
+            case .leftBrace: "'{'"
+            case .rightBrace: "'}'"
+            case .colon: "':'"
+            case .comma: "','"
+            case let .keyword(keyword): "'\(keyword.rawValue)'"
+            case .stringLiteral: "a string literal"
+            case .integerLiteral: "an integer literal"
+            case .floatLiteral: "a floating point literal"
+            case let .trivia(trivia):
+                switch trivia {
+                    case let .whitespace(whitespace):
+                        switch whitespace {
+                            case .space: "a space"
+                            case .tab: "a tab"
+                            case .newLine: "a newline"
+                        }
+                    case .comment: "a comment"
+                }
+        }
+    }
 }
 
 public struct RichToken: Equatable {

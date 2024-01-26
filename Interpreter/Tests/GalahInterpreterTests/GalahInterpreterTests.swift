@@ -41,4 +41,17 @@ final class GalahInterpreterTests: XCTestCase {
             XCTFail("Parsed unterminated string literal without throwing an error")
         } catch {}
     }
+
+    func testMandatoryWhitespace() throws {
+        do {
+            _ = try Parser.parse(try Lexer.lex(
+                """
+                fn dummy() {
+                    print(\"hi\") print(\"hi\")
+                }
+                """
+            ))
+            XCTFail("Two statements on the same line must fail")
+        } catch {}
+    }
 }

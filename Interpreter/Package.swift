@@ -17,7 +17,7 @@ let package = Package(
         .executableTarget(
             name: "galah",
             dependencies: [
-                "galah",
+                "GalahInterpreter",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
         ),

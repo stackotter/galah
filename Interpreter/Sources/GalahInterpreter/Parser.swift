@@ -15,29 +15,40 @@ public struct Parser {
     private consuming func parse() throws -> AST {
         var decls: [Decl] = []
 
-        while let token = next() {
+        skipTrivia()
+        while let token = peek() {
             switch token {
                 case .keyword(.fn):
                     decls.append(.fn(try parseFnDecl()))
                 default:
                     throw RichError("Unexpected token '\(token)' while parsing top-level declarations", at: location())
             }
+            skipTrivia()
         }
 
         return AST(decls: decls)
     }
 
     private mutating func parseFnDecl() throws -> FnDecl {
+        try expect(.keyword(.fn))
+        try expectWhitespaceSkippingTrivia()
+
         let ident = try expectIdent()
 
         try expect(.leftParen)
+        skipTrivia()
+        
         var params: [Param] = []
         while let token = peek(), token != .rightParen {
             let ident = try expectIdent()
+            skipTrivia()
+
             let type: String?
             if peek() == .colon {
                 next()
+                skipTrivia()
                 type = try expectIdent()
+                skipTrivia()
             } else {
                 type = nil
             }
@@ -49,8 +60,11 @@ public struct Parser {
             }
 
             next()
+            skipTrivia()
         }
         try expect(.rightParen)
+
+        skipTrivia()
 
         let stmts = try parseCodeBlock()
         return FnDecl(ident: ident, params: params, stmts: stmts)
@@ -66,18 +80,24 @@ public struct Parser {
 
     private mutating func parseIfStmt() throws -> IfStmt {
         try expect(.keyword(.if))
+        try expectWhitespaceSkippingTrivia()
         let condition = try parseExpr()
+        skipTrivia()
         let ifBlock = try parseCodeBlock()
+        skipTrivia()
         try expect(.keyword(.else))
+        skipTrivia()
         let elseBlock = try parseCodeBlock()
         return IfStmt(condition: condition, ifBlock: ifBlock, elseBlock: elseBlock)
     }
 
     private mutating func parseCodeBlock() throws -> [Stmt] {
         try expect(.leftBrace)
+        skipTrivia()
         var stmts: [Stmt] = []
         while let token = peek(), token != .rightBrace {
             stmts.append(try parseStmt())
+            try expectNewLineSkippingTrivia()
         }
         try expect(.rightBrace)
         return stmts
@@ -111,16 +131,22 @@ public struct Parser {
 
     private mutating func parseTuple() throws -> Tuple {
         try expect(.leftParen)
+        skipTrivia()
+
         var elements: [Expr] = []
         while let token = peek(), token != .rightParen {
             elements.append(try parseExpr())
+            skipTrivia()
 
             guard peek() == .comma else {
                 break
             }
 
             next()
+            skipTrivia()
         }
+
+        skipTrivia()
         try expect(.rightParen)
 
         return Tuple(elements: elements)
@@ -141,32 +167,57 @@ public struct Parser {
 
     @discardableResult
     private mutating func next() -> Token? {
-        while true {
-            guard let token = peek() else {
-                return nil
-            }
+        let token = peek()
+        previousIndex = index
+        index += 1
+        return token
+    }
 
+    private mutating func skipTrivia() {
+        while case .trivia = peek() {
             index += 1
+        }
+    }
 
-            guard case .trivia = token else {
-                previousIndex = index
-                while case .trivia = peek() {
-                    index += 1
-                }
-                return token
+    private mutating func expectWhitespaceSkippingTrivia() throws {
+        var foundWhitespace = false
+        while case let .trivia(trivia) = peek() {
+            index += 1
+            if case .whitespace = trivia {
+                foundWhitespace = true
             }
+        }
+        guard foundWhitespace else {
+            let token = next()
+            throw RichError("Expected whitespace, got \(token?.noun ?? "an EOF")", at: location())
+        }
+    }
+
+    private mutating func expectNewLineSkippingTrivia() throws {
+        var foundNewLine = false
+        while case let .trivia(trivia) = peek() {
+            index += 1
+            if trivia == .whitespace(.newLine) {
+                foundNewLine = true
+            }
+        }
+        guard foundNewLine else {
+            let token = next()
+            throw RichError("Expected a newline, got \(token?.noun ?? "an EOF")", at: location())
         }
     }
 
     private mutating func expect(_ token: Token) throws {
-        guard let nextToken = next(), nextToken == token else {
-            throw RichError("Expected '\(token)'", at: location())
+        let nextToken = next()
+        guard let nextToken = nextToken, nextToken == token else {
+            throw RichError("Expected \(token.noun), got \(nextToken?.noun ?? "an EOF")", at: location())
         }
     }
 
     private mutating func expectIdent() throws -> String {
-        guard case let .ident(ident) = next() else {
-            throw RichError("Expected ident", at: location())
+        let token = next()
+        guard case let .ident(ident) = token else {
+            throw RichError("Expected an ident, got \(token?.noun ?? "an EOF")", at: location())
         }
         return ident
     }
