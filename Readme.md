@@ -1,7 +1,10 @@
-## Yet To Be Named
+## galah
 
-This scripting language takes inspiration from Swift with the goal of being a lightweight
-scripting language with an interpreter written in Swift.
+A scripting language takes inspiration with the goal of being a lightweight and embeddable in Swift
+applications.
+
+This syntax is all bound to change! Nothing is set in stone, this is still heavily WIP and
+even the style of the language isn't completely decided yet.
 
 The following example program is strongly typed but relies heavily on type inference instead of type annotations.
 
@@ -53,7 +56,7 @@ fn main() {
 }
 ```
 
-With Python-style whitespace-based scoping we can make it look scriptier, but maybe that's
+With Python-style whitespace-based scoping we could make it look scriptier, but maybe that's
 not worth the downsides?
 
 ```python

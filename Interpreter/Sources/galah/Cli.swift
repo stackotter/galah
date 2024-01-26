@@ -1,4 +1,4 @@
-import Interpreter
+import GalahInterpreter
 import ArgumentParser
 import Foundation
 

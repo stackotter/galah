@@ -3,11 +3,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "Interpreter",
+    name: "galah",
     products: [
         .library(
-            name: "Interpreter",
-            targets: ["Interpreter"]
+            name: "GalahInterpreter",
+            targets: ["GalahInterpreter"]
         ),
     ],
     dependencies: [
@@ -15,18 +15,18 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "cli",
+            name: "galah",
             dependencies: [
-                "Interpreter",
+                "galah",
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
         ),
         .target(
-            name: "Interpreter"
+            name: "GalahInterpreter"
         ),
         .testTarget(
-            name: "InterpreterTests",
-            dependencies: ["Interpreter"]
+            name: "GalahInterpreterTests",
+            dependencies: ["GalahInterpreter"]
         ),
     ]
 )

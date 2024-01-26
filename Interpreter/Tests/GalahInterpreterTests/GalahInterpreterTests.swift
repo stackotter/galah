@@ -1,7 +1,7 @@
 import XCTest
-@testable import Interpreter
+@testable import GalahInterpreter
 
-final class InterpreterTests: XCTestCase {
+final class GalahInterpreterTests: XCTestCase {
     func lexerTestCase(_ text: String, _ expected: [(Token, Int, Int)]) {
         XCTAssertEqual(
             try Lexer.lex(text),
