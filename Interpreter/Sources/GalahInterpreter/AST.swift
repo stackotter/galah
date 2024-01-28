@@ -9,14 +9,21 @@ public struct AST {
 public enum Decl {
     case fn(FnDecl)
 
-    var ident: String {
+    public var ident: String {
         switch self {
             case let .fn(decl): decl.signature.ident
         }
     }
+
+    public var asFnDecl: FnDecl? {
+        switch self {
+            case let .fn(fnDecl):
+                fnDecl
+        }
+    }
 }
 
-public struct FnSignature {
+public struct FnSignature: Hashable {
     public var ident: String
     public var paramTypes: [Type]
     public var returnType: Type
@@ -38,7 +45,7 @@ public struct Param {
     public var type: Type
 }
 
-public enum Type {
+public enum Type: Hashable, CustomStringConvertible {
     case nominal(String)
 
     public static var void: Type {
@@ -47,6 +54,13 @@ public enum Type {
 
     public static var any: Type {
         .nominal("Any")
+    }
+
+    public var description: String {
+        switch self {
+            case let .nominal(name):
+                name
+        }
     }
 }
 
@@ -73,7 +87,7 @@ public indirect enum Expr {
     case ident(String)
     case unaryOp(UnaryOpExpr)
     case binaryOp(BinaryOpExpr)
-    case parenthesisedExpr(Expr)
+    case parenthesizedExpr(Expr)
 }
 
 public struct UnaryOpExpr {

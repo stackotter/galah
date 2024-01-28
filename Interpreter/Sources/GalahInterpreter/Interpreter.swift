@@ -40,7 +40,10 @@ public struct Interpreter {
         BuiltinFn(unaryOp: "-") { (x: Int) in
             -x
         },
-        BuiltinFn("print") { (x: Any) in
+        BuiltinFn("print") { (x: Int) in
+            print(x)
+        },
+        BuiltinFn("print") { (x: String) in
             print(x)
         },
     ]
@@ -116,7 +119,7 @@ public struct Interpreter {
                     ),
                     locals
                 )
-            case let .parenthesisedExpr(innerExpr):
+            case let .parenthesizedExpr(innerExpr):
                 return try evaluate(innerExpr, locals)
         }
     }
