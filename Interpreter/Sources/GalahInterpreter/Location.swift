@@ -14,4 +14,15 @@ public struct Location: Equatable {
         location.column -= n
         return location
     }
+
+    public static func +(_ lhs: Self, _ rhs: Token.Size) -> Self {
+        var result = lhs
+        result.line += rhs.lines - 1
+        if rhs.lines == 1 {
+            result.column += rhs.lastLineColumns
+        } else {
+            result.column = rhs.lastLineColumns
+        }
+        return result
+    }
 }

@@ -97,7 +97,11 @@ public struct Parser {
         var stmts: [Stmt] = []
         while let token = peek(), token != .rightBrace {
             stmts.append(try parseStmt())
-            try expectNewLineSkippingTrivia()
+            do {
+                try expectNewLineSkippingTrivia()
+            } catch {
+                break
+            }
         }
         try expect(.rightBrace)
         return stmts
@@ -165,45 +169,53 @@ public struct Parser {
         return tokens[previousIndex].location
     }
 
+    /// The location of the token that would be returned by ``Parser/peek``. If at the
+    /// end of the file, the location after the file's last token is given.
+    private func peekLocation() -> Location {
+        location() + tokens[previousIndex].token.size
+    }
+
     @discardableResult
     private mutating func next() -> Token? {
         let token = peek()
-        previousIndex = index
-        index += 1
+        if token != nil {
+            previousIndex = index
+            index += 1
+        }
         return token
     }
 
     private mutating func skipTrivia() {
         while case .trivia = peek() {
-            index += 1
+            next()
         }
     }
 
     private mutating func expectWhitespaceSkippingTrivia() throws {
         var foundWhitespace = false
         while case let .trivia(trivia) = peek() {
-            index += 1
+            next()
             if case .whitespace = trivia {
                 foundWhitespace = true
             }
         }
         guard foundWhitespace else {
-            let token = next()
-            throw RichError("Expected whitespace, got \(token?.noun ?? "an EOF")", at: location())
+            let token = peek()
+            throw RichError("Expected whitespace, got \(token?.noun ?? "an EOF")", at: peekLocation())
         }
     }
 
     private mutating func expectNewLineSkippingTrivia() throws {
         var foundNewLine = false
         while case let .trivia(trivia) = peek() {
-            index += 1
+            next()
             if trivia == .whitespace(.newLine) {
                 foundNewLine = true
             }
         }
         guard foundNewLine else {
-            let token = next()
-            throw RichError("Expected a newline, got \(token?.noun ?? "an EOF")", at: location())
+            let token = peek()
+            throw RichError("Expected a newline, got \(token?.noun ?? "an EOF")", at: peekLocation())
         }
     }
 
