@@ -15,6 +15,10 @@ public enum Trivia: Equatable {
     case comment(String)
 }
 
+public struct Op: Equatable {
+    var token: String
+}
+
 public enum Token: Equatable {
     case ident(String)
     case leftParen
@@ -27,6 +31,7 @@ public enum Token: Equatable {
     case stringLiteral(String)
     case integerLiteral(Int)
     case trivia(Trivia)
+    case op(Op)
 
     public var noun: String {
         switch self {
@@ -50,6 +55,7 @@ public enum Token: Equatable {
                         }
                     case .comment: "a comment"
                 }
+            case let .op(op): "'\(op.token)'"
         }
     }
 
@@ -79,7 +85,8 @@ public enum Token: Equatable {
 
         public init(ofStringLiteral content: String) {
             lines = 1
-            lastLineColumns = 0
+            // Account for the opening delimiter
+            lastLineColumns = 1
             for character in content {
                 if character.isNewline {
                     lines += 1
@@ -88,6 +95,8 @@ public enum Token: Equatable {
                     lastLineColumns += 1
                 }
             }
+            // Account for the closing delimiter
+            lastLineColumns += 1
         }
     }
 
@@ -113,6 +122,7 @@ public enum Token: Equatable {
                     case let .comment(content):
                         Size(columns: content.count + 2)
                 }
+            case let .op(op): Size(columns: op.token.count)
         }
     }
 }

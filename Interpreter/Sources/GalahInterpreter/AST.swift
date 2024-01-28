@@ -38,17 +38,30 @@ public struct IfStmt {
         case `else`([Stmt])
     }
 
-    var condition: Expr
-    var ifBlock: [Stmt]
-    var `else`: ElseBlock?
+    public var condition: Expr
+    public var ifBlock: [Stmt]
+    public var `else`: ElseBlock?
 }
 
-
-public enum Expr {
+public indirect enum Expr {
     case stringLiteral(String)
     case integerLiteral(Int)
     case fnCall(FnCallExpr)
     case ident(String)
+    case unaryOp(UnaryOpExpr)
+    case binaryOp(BinaryOpExpr)
+    case parenthesisedExpr(Expr)
+}
+
+public struct UnaryOpExpr {
+    let op: Op
+    let operand: Expr
+}
+
+public struct BinaryOpExpr {
+    let op: Op
+    let leftOperand: Expr
+    let rightOperand: Expr
 }
 
 public struct FnCallExpr {

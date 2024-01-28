@@ -38,9 +38,12 @@ public struct Interpreter {
             BuiltinFn("not") { (x: Int) in
                 x == 0 ? 1 : 0
             },
+            BuiltinFn("neg") { (x: Int) in
+                -x
+            },
             BuiltinFn("print") { (x: Any) in
                 print(x)
-            }
+            },
         ],
         keyedBy: \.ident
     )
@@ -87,25 +90,29 @@ public struct Interpreter {
         }
     }
 
+    public func evaluate(_ fnCallExpr: FnCallExpr, _ locals: [String: Any]) throws -> Any {
+        let arguments = try fnCallExpr.arguments.map { argument in
+            try evaluate(argument, locals)
+        }
+
+        if let builtin = Self.builtins[fnCallExpr.ident] {
+            return try builtin.call(with: arguments)
+        } else {
+            guard case let .fn(fnDecl) = decls[fnCallExpr.ident] else {
+                throw RichError("No such function '\(fnCallExpr.ident)'")
+            }
+            var locals: [String: Any] = [:]
+            for (ident, value) in zip(fnDecl.params.map(\.ident), arguments) {
+                locals[ident] = value
+            }
+            return try evaluate(fnDecl.stmts, locals)
+        }
+    }
+
     public func evaluate(_ expr: Expr, _ locals: [String: Any]) throws -> Any {
         switch expr {
             case let .fnCall(fnCallExpr):
-                let arguments = try fnCallExpr.arguments.map { argument in
-                    try evaluate(argument, locals)
-                }
-
-                if let builtin = Self.builtins[fnCallExpr.ident] {
-                    return try builtin.call(with: arguments)
-                } else {
-                    guard case let .fn(fnDecl) = decls[fnCallExpr.ident] else {
-                        throw RichError("No such function '\(fnCallExpr.ident)'")
-                    }
-                    var locals: [String: Any] = [:]
-                    for (ident, value) in zip(fnDecl.params.map(\.ident), arguments) {
-                        locals[ident] = value
-                    }
-                    return try evaluate(fnDecl.stmts, locals)
-                }
+                return try evaluate(fnCallExpr, locals)
             case let .ident(ident):
                 guard let value = locals[ident] else {
                     throw RichError("No such local variable '\(ident)'")
@@ -115,6 +122,37 @@ public struct Interpreter {
                 return value
             case let .stringLiteral(value):
                 return value
+            case let .binaryOp(opExpr):
+                let ident: String
+                switch opExpr.op.token {
+                    case "+": ident = "add"
+                    case "-": ident = "sub"
+                    case "==": ident = "equals"
+                    case let op: throw RichError("No such operator '\(op)'")
+                }
+                return try evaluate(
+                    FnCallExpr(
+                        ident: ident,
+                        arguments: [opExpr.leftOperand, opExpr.rightOperand]
+                    ),
+                    locals
+                )
+            case let .unaryOp(opExpr):
+                let ident: String
+                switch opExpr.op.token {
+                    case "-": ident = "neg"
+                    case "!": ident = "not"
+                    case let op: throw RichError("No such operator '\(op)'")
+                }
+                return try evaluate(
+                    FnCallExpr(
+                        ident: ident,
+                        arguments: [opExpr.operand]
+                    ),
+                    locals
+                )
+            case let .parenthesisedExpr(innerExpr):
+                return try evaluate(innerExpr, locals)
         }
     }
 

@@ -127,24 +127,46 @@ public struct Parser {
             throw RichError("Unexpected EOF while parsing expression", at: location())
         }
 
-        return switch token {
+        let expr: Expr
+        switch token {
             case let .ident(ident):
                 if peek() == .leftParen {
-                    .fnCall(
+                    expr = .fnCall(
                         FnCallExpr(
                             ident: ident,
                             arguments: try parseTuple().elements
                         )
                     )
                 } else {
-                    .ident(ident)
+                    expr = .ident(ident)
                 }
             case let .stringLiteral(value):
-                .stringLiteral(value)
+                expr = .stringLiteral(value)
             case let .integerLiteral(value):
-                .integerLiteral(value)
+                expr = .integerLiteral(value)
+            case let .op(op):
+                if case .trivia = peek() {
+                    throw RichError("A prefix unary operator must not be separated from its operand", at: location())
+                }
+                expr = .unaryOp(UnaryOpExpr(op: op, operand: try parseExpr()))
             default:
-                throw RichError("Unexpected token while parsing expression: \(token)", at: location())
+                throw RichError("Expected an expression, got \(token.noun)", at: location())
+        }
+
+        let indexBeforeTrivia = index
+        let hasWhitespaceBeforeOp = skipTrivia().foundWhitespace
+        if case let .op(op) = peek() {
+            next()
+            let operatorLocation = location()
+            let hasWhitespaceAfterOp = skipTrivia().foundWhitespace
+            guard hasWhitespaceBeforeOp == hasWhitespaceAfterOp else {
+                throw RichError("A binary operator must either have whitespace on both sides or none at all", at: operatorLocation)
+            }
+            let rightOperand = try parseExpr()
+            return .binaryOp(BinaryOpExpr(op: op, leftOperand: expr, rightOperand: rightOperand))
+        } else {
+            index = indexBeforeTrivia
+            return expr
         }
     }
 
@@ -200,10 +222,38 @@ public struct Parser {
         return token
     }
 
-    private mutating func skipTrivia() {
-        while case .trivia = peek() {
+    private struct TriviaSkippingResult {
+        var foundWhitespace: Bool
+        var foundNewLine: Bool
+        var foundComment: Bool
+        var skippedTrivia: Bool
+    }
+
+    /// Returns whether any trivia was skipped.
+    @discardableResult
+    private mutating func skipTrivia() -> TriviaSkippingResult {
+        var whitespaceCount = 0
+        var newLineCount = 0
+        var commentCount = 0
+        var count = 0
+        while case let .trivia(trivia) = peek() {
             next()
+            switch trivia {
+                case .comment: commentCount += 1
+                case let .whitespace(whitespace):
+                    whitespaceCount += 1
+                    if whitespace == .newLine {
+                        newLineCount += 1
+                    }
+            }
+            count += 1
         }
+        return TriviaSkippingResult(
+            foundWhitespace: whitespaceCount > 0,
+            foundNewLine: newLineCount > 0,
+            foundComment: commentCount > 0,
+            skippedTrivia: count > 0
+        )
     }
 
     private mutating func expectWhitespaceSkippingTrivia() throws {

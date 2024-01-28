@@ -2,6 +2,7 @@ public enum Lexer {
     static let firstIdentChars = Array("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
     static let identChars = Array("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
     static let digitChars = Array("0123456789")
+    static let operatorChars = Array("+-*/><=!%^&|?~")
 
     public static func lex(_ text: String) throws -> [RichToken] {
         var buffer = TextBuffer(text)
@@ -89,6 +90,13 @@ public enum Lexer {
                     content.append(c)
                 }
                 tokens.append(RichToken(.trivia(.comment(content)), at: location))
+            } else if operatorChars.contains(c) {
+                var token = String(c)
+                while let c = buffer.peek(), operatorChars.contains(c) {
+                    buffer.next()
+                    token.append(c)
+                }
+                tokens.append(RichToken(.op(Op(token: token)), at: location))
             } else {
                 throw RichError("Unexpected character '\(c)'", at: buffer.location)
             }
