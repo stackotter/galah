@@ -41,8 +41,11 @@ public struct Interpreter {
             BuiltinFn("neg") { (x: Int) in
                 -x
             },
-            BuiltinFn("print") { (x: Any) in
-                print(x)
+            BuiltinFn(variadic: "print") { (args: [Any]) in
+                print(
+                    args.map({ "\($0)" })
+                        .joined(separator: " ")
+                )
             },
         ],
         keyedBy: \.ident

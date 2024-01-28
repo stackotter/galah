@@ -6,13 +6,15 @@ public struct BuiltinFn {
         case fn0(() throws -> Any)
         case fn1((Any) throws -> Any)
         case fn2((Any, Any) throws -> Any)
+        case variadic(([Any]) throws -> Any)
     }
 
-    public var arity: Int {
+    public var arity: Int? {
         switch self.storage {
             case .fn0: 0
             case .fn1: 1
             case .fn2: 2
+            case .variadic: nil
         }
     }
 
@@ -40,9 +42,20 @@ public struct BuiltinFn {
         }
     }
 
+    public init<T, R>(variadic ident: String, _ fn: @escaping ([T]) -> R) {
+        self.ident = ident
+        self.storage = .variadic { arguments in
+            return fn(
+                try arguments.map { try Self.cast($0, for: ident) }
+            )
+        }
+    }
+
     public func call(with arguments: [Any]) throws -> Any {
-        guard arity == arguments.count else {
-            throw RichError("'\(ident)' expects \(arity) arguments, got \(arguments.count)")
+        if let arity {
+            guard arity == arguments.count else {
+                throw RichError("'\(ident)' expects \(arity) arguments, got \(arguments.count)")
+            }
         }
 
         return switch self.storage {
@@ -52,6 +65,8 @@ public struct BuiltinFn {
                 try fn(arguments[0])
             case let .fn2(fn):
                 try fn(arguments[0], arguments[1])
+            case let .variadic(fn):
+                try fn(arguments)
         }
     }
 
