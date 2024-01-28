@@ -39,7 +39,7 @@ public struct TypeChecker {
             locals[param.ident] = (index: i, type: param.type)
         }
 
-        return CheckedAST.Fn(stmts: try check(fn.stmts, locals))
+        return CheckedAST.Fn(signature: fn.signature, stmts: try check(fn.stmts, locals))
     }
 
     private func check(_ stmts: [Stmt], _ locals: LocalsTable) throws -> [CheckedAST.Stmt] {

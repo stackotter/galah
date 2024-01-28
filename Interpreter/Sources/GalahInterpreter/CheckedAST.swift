@@ -3,6 +3,7 @@ public struct CheckedAST {
     public var fns: [Fn]
 
     public struct Fn {
+        public var signature: FnSignature
         public var stmts: [Stmt]
     }
 
@@ -36,5 +37,11 @@ public struct CheckedAST {
     public struct FnCallExpr {
         public var id: FnId
         public var arguments: [Expr]
+    }
+
+    public func fn(named ident: String, withParamTypes paramTypes: [Type]) -> Fn? {
+        fns.first { fn in
+            fn.signature.ident == ident && fn.signature.paramTypes == paramTypes
+        }
     }
 }

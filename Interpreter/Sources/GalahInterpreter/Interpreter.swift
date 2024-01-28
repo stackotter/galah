@@ -9,20 +9,16 @@ public struct Interpreter {
 
         let ast = try Parser.parse(tokens)
 
-        let interpreter = Interpreter(ast)
+        let checkedAST = try TypeChecker.check(ast, builtins)
 
-        guard case let .fn(main) = interpreter.decls["main"] else {
+        let interpreter = Interpreter(checkedAST)
+
+        guard let main = interpreter.ast.fn(named: "main", withParamTypes: []) else {
             throw RichError("Missing 'main' function")
         }
 
-        guard main.params.isEmpty else {
-            throw RichError("'main' function must not have any parameters")
-        }
-
-        _ = try interpreter.evaluate(main.stmts, [:])
+        _ = try interpreter.evaluate(main.stmts, [])
     }
-
-    var decls: [String: Decl]
 
     static let builtins: [BuiltinFn] = [
         BuiltinFn(binaryOp: "+") { (a: Int, b: Int) in
@@ -48,11 +44,13 @@ public struct Interpreter {
         },
     ]
 
-    public init(_ ast: AST) {
-        decls = Self.dictionary(of: ast.decls, keyedBy: \.ident)
+    var ast: CheckedAST
+
+    public init(_ ast: CheckedAST) {
+        self.ast = ast
     }
 
-    public func evaluate(_ stmts: [Stmt], _ locals: [String: Any]) throws -> Any {
+    public func evaluate(_ stmts: [CheckedAST.Stmt], _ locals: [Any]) throws -> Any {
         for (i, stmt) in stmts.enumerated() {
             let result = try evaluate(stmt, locals)
             if i == stmts.count - 1 {
@@ -62,7 +60,7 @@ public struct Interpreter {
         return Void()
     }
 
-    public func evaluate(_ stmt: Stmt, _ locals: [String: Any]) throws -> Any {
+    public func evaluate(_ stmt: CheckedAST.Stmt, _ locals: [Any]) throws -> Any {
         switch stmt {
             case let .expr(expr):
                 return try evaluate(expr, locals)
@@ -71,78 +69,40 @@ public struct Interpreter {
         }
     }
 
-    public func evaluate(_ ifStmt: IfStmt, _ locals: [String: Any]) throws -> Any {
-        guard let condition = try evaluate(ifStmt.condition, locals) as? Int else {
-            throw RichError("'if' conditions must be integers")
-        }
-
+    public func evaluate(_ ifStmt: CheckedAST.IfStmt, _ locals: [Any]) throws -> Any {
+        let condition = try evaluate(ifStmt.ifBlock.condition, locals) as! Int
         if condition != 0 {
-            return try evaluate(ifStmt.ifBlock, locals)
+            return try evaluate(ifStmt.ifBlock.condition, locals)
         } else {
-            switch ifStmt.`else` {
-                case let .elseIf(elseIfBlock):
-                    return try evaluate(elseIfBlock, locals)
-                case let .else(stmts):
-                    return try evaluate(stmts, locals)
-                case nil:
-                    return Void()
-            }
-        }
-    }
-
-    public func evaluate(_ expr: Expr, _ locals: [String: Any]) throws -> Any {
-        switch expr {
-            case let .fnCall(fnCallExpr):
-                return try evaluate(fnCallExpr, locals)
-            case let .ident(ident):
-                guard let value = locals[ident] else {
-                    throw RichError("No such local variable '\(ident)'")
+            for elseIfBlock in ifStmt.elseIfBlocks {
+                let condition = try evaluate(elseIfBlock.condition, locals) as! Int
+                if condition != 0 {
+                    return try evaluate(elseIfBlock.block, locals)
                 }
-                return value
-            case let .integerLiteral(value):
-                return value
-            case let .stringLiteral(value):
-                return value
-            case let .binaryOp(opExpr):
-                return try evaluate(
-                    FnCallExpr(
-                        ident: opExpr.op.token,
-                        arguments: [opExpr.leftOperand, opExpr.rightOperand]
-                    ),
-                    locals
-                )
-            case let .unaryOp(opExpr):
-                return try evaluate(
-                    FnCallExpr(
-                        ident: opExpr.op.token,
-                        arguments: [opExpr.operand]
-                    ),
-                    locals
-                )
-            case let .parenthesizedExpr(innerExpr):
-                return try evaluate(innerExpr, locals)
+            }
+            if let elseBlock = ifStmt.elseBlock {
+                return try evaluate(elseBlock, locals)
+            }
+            return Void()
         }
     }
 
-    public func evaluate(_ fnCallExpr: FnCallExpr, _ locals: [String: Any]) throws -> Any {
-        let arguments = try fnCallExpr.arguments.map { argument in
-            try evaluate(argument, locals)
-        }
-
-        if let builtin = Self.builtins.first(where: { $0.signature.ident == fnCallExpr.ident && ($0.arity == nil || $0.arity == arguments.count) }) {
-            return try builtin.call(with: arguments)
-        } else {
-            guard case let .fn(fnDecl) = decls[fnCallExpr.ident] else {
-                // TODO: Update error message to be more correct (currently incorrect when
-                //   you try to call a built-in function with an incorrect number of args).
-                let type = "(\(arguments.map { _ in "_" }.joined(separator: ", "))) -> _"
-                throw RichError("No such function '\(fnCallExpr.ident)' with type '\(type)'")
-            }
-            var locals: [String: Any] = [:]
-            for (ident, value) in zip(fnDecl.params.map(\.ident), arguments) {
-                locals[ident] = value
-            }
-            return try evaluate(fnDecl.stmts, locals)
+    public func evaluate(_ expr: CheckedAST.Expr, _ locals: [Any]) throws -> Any {
+        switch expr {
+            case let .constant(value):
+                return value
+            case let .fnCall(fnCallExpr):
+                let arguments = try fnCallExpr.arguments.map { argument in
+                    try evaluate(argument, locals)
+                }
+                switch fnCallExpr.id {
+                    case let .builtin(index):
+                        return try ast.builtins[index].call(with: arguments)
+                    case let .userDefined(index):
+                        return try evaluate(ast.fns[index].stmts, arguments)
+                }
+            case let .localVar(index):
+                return locals[index]
         }
     }
 

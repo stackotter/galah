@@ -10,5 +10,5 @@ fn fibonacci(n: Int) -> Int {
 
 fn main() {
     print("The 20th fibonacci number is:")
-    print(fibonacci(20))
+    print(fibonacci(30))
 }
