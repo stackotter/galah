@@ -33,10 +33,16 @@ public enum Stmt {
 }
 
 public struct IfStmt {
+    public indirect enum ElseBlock {
+        case elseIf(IfStmt)
+        case `else`([Stmt])
+    }
+
     var condition: Expr
     var ifBlock: [Stmt]
-    var elseBlock: [Stmt]
+    var `else`: ElseBlock?
 }
+
 
 public enum Expr {
     case stringLiteral(String)

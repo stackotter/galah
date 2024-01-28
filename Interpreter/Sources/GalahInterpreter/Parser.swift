@@ -85,10 +85,25 @@ public struct Parser {
         skipTrivia()
         let ifBlock = try parseCodeBlock()
         skipTrivia()
-        try expect(.keyword(.else))
-        skipTrivia()
-        let elseBlock = try parseCodeBlock()
-        return IfStmt(condition: condition, ifBlock: ifBlock, elseBlock: elseBlock)
+
+        let `else`: IfStmt.ElseBlock?
+        if peek() == .keyword(.else) {
+            next()
+            skipTrivia()
+
+            switch peek() {
+                case .keyword(.if):
+                    `else` = .elseIf(try parseIfStmt())
+                case .leftBrace:
+                    `else` = .else(try parseCodeBlock())
+                case let token:
+                    throw RichError("Expected 'if' or '{', got \(token?.noun ?? "EOF")", at: peekLocation())
+            }
+        } else {
+            `else` = nil
+        }
+        
+        return IfStmt(condition: condition, ifBlock: ifBlock, else: `else`)
     }
 
     private mutating func parseCodeBlock() throws -> [Stmt] {

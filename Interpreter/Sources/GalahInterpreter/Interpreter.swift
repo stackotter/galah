@@ -64,15 +64,26 @@ public struct Interpreter {
             case let .expr(expr):
                 return try evaluate(expr, locals)
             case let .if(ifStmt):
-                guard let condition = try evaluate(ifStmt.condition, locals) as? Int else {
-                    throw RichError("'if' conditions must be integers")
-                }
+                return try evaluate(ifStmt, locals)
+        }
+    }
 
-                if condition != 0 {
-                    return try evaluate(ifStmt.ifBlock, locals)
-                } else {
-                    return try evaluate(ifStmt.elseBlock, locals)
-                }
+    public func evaluate(_ ifStmt: IfStmt, _ locals: [String: Any]) throws -> Any {
+        guard let condition = try evaluate(ifStmt.condition, locals) as? Int else {
+            throw RichError("'if' conditions must be integers")
+        }
+
+        if condition != 0 {
+            return try evaluate(ifStmt.ifBlock, locals)
+        } else {
+            switch ifStmt.`else` {
+                case let .elseIf(elseIfBlock):
+                    return try evaluate(elseIfBlock, locals)
+                case let .else(stmts):
+                    return try evaluate(stmts, locals)
+                case nil:
+                    return Void()
+            }
         }
     }
 
