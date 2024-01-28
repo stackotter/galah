@@ -11,20 +11,43 @@ public enum Decl {
 
     var ident: String {
         switch self {
-            case let .fn(decl): decl.ident
+            case let .fn(decl): decl.signature.ident
         }
     }
+}
+
+public struct FnSignature {
+    public var ident: String
+    public var paramTypes: [Type]
+    public var returnType: Type
 }
 
 public struct FnDecl {
     public var ident: String
     public var params: [Param]
+    public var returnType: Type?
     public var stmts: [Stmt]
+
+    public var signature: FnSignature {
+        FnSignature(ident: ident, paramTypes: params.map(\.type), returnType: returnType ?? .nominal("Void"))
+    }
 }
 
 public struct Param {
     public var ident: String
-    public var type: String?
+    public var type: Type
+}
+
+public enum Type {
+    case nominal(String)
+
+    public static var void: Type {
+        .nominal("Void")
+    }
+
+    public static var any: Type {
+        .nominal("Any")
+    }
 }
 
 public enum Stmt {

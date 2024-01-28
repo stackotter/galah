@@ -42,17 +42,10 @@ public struct Parser {
         while let token = peek(), token != .rightParen {
             let ident = try expectIdent()
             skipTrivia()
+            try expect(.colon)
+            skipTrivia()
 
-            let type: String?
-            if peek() == .colon {
-                next()
-                skipTrivia()
-                type = try expectIdent()
-                skipTrivia()
-            } else {
-                type = nil
-            }
-
+            let type = try parseType()
             params.append(Param(ident: ident, type: type))
 
             guard peek() == .comma else {
@@ -66,8 +59,23 @@ public struct Parser {
 
         skipTrivia()
 
+        let returnType: Type?
+        if case let .op(op) = peek(), op.token == "->" {
+            next()
+            skipTrivia()
+            returnType = try parseType()
+            skipTrivia()
+        } else {
+            returnType = nil
+        }
+
         let stmts = try parseCodeBlock()
-        return FnDecl(ident: ident, params: params, stmts: stmts)
+        return FnDecl(
+            ident: ident,
+            params: params,
+            returnType: returnType,
+            stmts: stmts
+        )
     }
 
     private mutating func parseStmt() throws -> Stmt {
@@ -191,6 +199,10 @@ public struct Parser {
         try expect(.rightParen)
 
         return Tuple(elements: elements)
+    }
+
+    private mutating func parseType() throws -> Type {
+        .nominal(try expectIdent())
     }
 
     private func peek() -> Token? {

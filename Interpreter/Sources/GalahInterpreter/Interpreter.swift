@@ -24,32 +24,26 @@ public struct Interpreter {
 
     var decls: [String: Decl]
 
-    static let builtins: [String: BuiltinFn] = Self.dictionary(
-        of: [
-            BuiltinFn("add") { (a: Int, b: Int) in
-                a + b
-            },
-            BuiltinFn("sub") { (a: Int, b: Int) in
-                a - b
-            },
-            BuiltinFn("equals") { (a: Int, b: Int) in
-                a == b ? 1 : 0
-            },
-            BuiltinFn("not") { (x: Int) in
-                x == 0 ? 1 : 0
-            },
-            BuiltinFn("neg") { (x: Int) in
-                -x
-            },
-            BuiltinFn(variadic: "print") { (args: [Any]) in
-                print(
-                    args.map({ "\($0)" })
-                        .joined(separator: " ")
-                )
-            },
-        ],
-        keyedBy: \.ident
-    )
+    static let builtins: [BuiltinFn] = [
+        BuiltinFn(binaryOp: "+") { (a: Int, b: Int) in
+            a + b
+        },
+        BuiltinFn(binaryOp: "-") { (a: Int, b: Int) in
+            a - b
+        },
+        BuiltinFn(binaryOp: "==") { (a: Int, b: Int) in
+            a == b ? 1 : 0
+        },
+        BuiltinFn(unaryOp: "!") { (x: Int) in
+            x == 0 ? 1 : 0
+        },
+        BuiltinFn(unaryOp: "-") { (x: Int) in
+            -x
+        },
+        BuiltinFn("print") { (x: Any) in
+            print(x)
+        },
+    ]
 
     public init(_ ast: AST) {
         decls = Self.dictionary(of: ast.decls, keyedBy: \.ident)
@@ -93,25 +87,6 @@ public struct Interpreter {
         }
     }
 
-    public func evaluate(_ fnCallExpr: FnCallExpr, _ locals: [String: Any]) throws -> Any {
-        let arguments = try fnCallExpr.arguments.map { argument in
-            try evaluate(argument, locals)
-        }
-
-        if let builtin = Self.builtins[fnCallExpr.ident] {
-            return try builtin.call(with: arguments)
-        } else {
-            guard case let .fn(fnDecl) = decls[fnCallExpr.ident] else {
-                throw RichError("No such function '\(fnCallExpr.ident)'")
-            }
-            var locals: [String: Any] = [:]
-            for (ident, value) in zip(fnDecl.params.map(\.ident), arguments) {
-                locals[ident] = value
-            }
-            return try evaluate(fnDecl.stmts, locals)
-        }
-    }
-
     public func evaluate(_ expr: Expr, _ locals: [String: Any]) throws -> Any {
         switch expr {
             case let .fnCall(fnCallExpr):
@@ -126,36 +101,45 @@ public struct Interpreter {
             case let .stringLiteral(value):
                 return value
             case let .binaryOp(opExpr):
-                let ident: String
-                switch opExpr.op.token {
-                    case "+": ident = "add"
-                    case "-": ident = "sub"
-                    case "==": ident = "equals"
-                    case let op: throw RichError("No such operator '\(op)'")
-                }
                 return try evaluate(
                     FnCallExpr(
-                        ident: ident,
+                        ident: opExpr.op.token,
                         arguments: [opExpr.leftOperand, opExpr.rightOperand]
                     ),
                     locals
                 )
             case let .unaryOp(opExpr):
-                let ident: String
-                switch opExpr.op.token {
-                    case "-": ident = "neg"
-                    case "!": ident = "not"
-                    case let op: throw RichError("No such operator '\(op)'")
-                }
                 return try evaluate(
                     FnCallExpr(
-                        ident: ident,
+                        ident: opExpr.op.token,
                         arguments: [opExpr.operand]
                     ),
                     locals
                 )
             case let .parenthesisedExpr(innerExpr):
                 return try evaluate(innerExpr, locals)
+        }
+    }
+
+    public func evaluate(_ fnCallExpr: FnCallExpr, _ locals: [String: Any]) throws -> Any {
+        let arguments = try fnCallExpr.arguments.map { argument in
+            try evaluate(argument, locals)
+        }
+
+        if let builtin = Self.builtins.first(where: { $0.signature.ident == fnCallExpr.ident && ($0.arity == nil || $0.arity == arguments.count) }) {
+            return try builtin.call(with: arguments)
+        } else {
+            guard case let .fn(fnDecl) = decls[fnCallExpr.ident] else {
+                // TODO: Update error message to be more correct (currently incorrect when
+                //   you try to call a built-in function with an incorrect number of args).
+                let type = "(\(arguments.map { _ in "_" }.joined(separator: ", "))) -> _"
+                throw RichError("No such function '\(fnCallExpr.ident)' with type '\(type)'")
+            }
+            var locals: [String: Any] = [:]
+            for (ident, value) in zip(fnDecl.params.map(\.ident), arguments) {
+                locals[ident] = value
+            }
+            return try evaluate(fnDecl.stmts, locals)
         }
     }
 
