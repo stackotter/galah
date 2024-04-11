@@ -51,13 +51,11 @@ public struct Interpreter {
     }
 
     public func evaluate(_ stmts: [CheckedAST.Stmt], _ locals: [Any]) throws -> Any {
-        for (i, stmt) in stmts.enumerated() {
-            let result = try evaluate(stmt, locals)
-            if i == stmts.count - 1 {
-                return result
-            }
+        var result: Any = Void()
+        for stmt in stmts {
+            result = try evaluate(stmt, locals)
         }
-        return Void()
+        return result
     }
 
     public func evaluate(_ stmt: CheckedAST.Stmt, _ locals: [Any]) throws -> Any {
@@ -69,13 +67,22 @@ public struct Interpreter {
         }
     }
 
+    private static func cast<T>(_ value: Any) -> T {
+        assert(type(of: value) == T.self)
+        return withUnsafePointer(to: value) { pointer in
+            pointer.withMemoryRebound(to: T.self, capacity: 1) { pointer in
+                pointer.pointee
+            }
+        }
+    }
+
     public func evaluate(_ ifStmt: CheckedAST.IfStmt, _ locals: [Any]) throws -> Any {
-        let condition = try evaluate(ifStmt.ifBlock.condition, locals) as! Int
+        let condition: Int = Self.cast(try evaluate(ifStmt.ifBlock.condition, locals))
         if condition != 0 {
             return try evaluate(ifStmt.ifBlock.block, locals)
         } else {
             for elseIfBlock in ifStmt.elseIfBlocks {
-                let condition = try evaluate(elseIfBlock.condition, locals) as! Int
+                let condition: Int = Self.cast(try evaluate(elseIfBlock.condition, locals))
                 if condition != 0 {
                     return try evaluate(elseIfBlock.block, locals)
                 }
@@ -102,7 +109,7 @@ public struct Interpreter {
                         return try evaluate(ast.fns[index].stmts, arguments)
                 }
             case let .localVar(index):
-                return locals[index]
+                return locals.withUnsafeBufferPointer { $0[index] }
         }
     }
 

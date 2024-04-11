@@ -29,7 +29,7 @@ public struct BuiltinFn {
 
     public init<A: GalahRepresentable, R: GalahRepresentable>(_ ident: String, _ fn: @escaping (A) -> R) {
         storage = .fn1 { a in
-            return fn(try Self.cast(a, for: ident))
+            return fn(Self.cast(a, for: ident))
         }
         signature = FnSignature(
             ident: ident,
@@ -43,8 +43,8 @@ public struct BuiltinFn {
     ) {
         storage = .fn2 { a, b in
             return fn(
-                try Self.cast(a, for: ident),
-                try Self.cast(b, for: ident)
+                Self.cast(a, for: ident),
+                Self.cast(b, for: ident)
             )
         }
         signature = FnSignature(
@@ -57,7 +57,7 @@ public struct BuiltinFn {
     public init<Operand: GalahRepresentable, R: GalahRepresentable>(unaryOp ident: String, _ fn: @escaping (Operand) -> R) {
         storage = .unaryOp { operand in
             return fn(
-                try Self.cast(operand, for: ident)
+                Self.cast(operand, for: ident)
             )
         }
         signature = FnSignature(
@@ -70,8 +70,8 @@ public struct BuiltinFn {
     public init<Left: GalahRepresentable, Right: GalahRepresentable, R: GalahRepresentable>(binaryOp ident: String, _ fn: @escaping (Left, Right) -> R) {
         storage = .binaryOp { left, right in
             return fn(
-                try Self.cast(left, for: ident),
-                try Self.cast(right, for: ident)
+                Self.cast(left, for: ident),
+                Self.cast(right, for: ident)
             )
         }
         signature = FnSignature(
@@ -90,7 +90,7 @@ public struct BuiltinFn {
 
     public init<A: GalahRepresentable>(_ ident: String, _ fn: @escaping (A) -> Void) {
         storage = .fn1 { a in
-            return fn(try Self.cast(a, for: ident))
+            return fn(Self.cast(a, for: ident))
         }
         signature = FnSignature(
             ident: ident,
@@ -101,7 +101,7 @@ public struct BuiltinFn {
 
     public init(_ ident: String, _ fn: @escaping (Any) -> Void) {
         storage = .fn1 { a in
-            return fn(try Self.cast(a, for: ident))
+            return fn(Self.cast(a, for: ident))
         }
         signature = FnSignature(
             ident: ident,
@@ -113,8 +113,8 @@ public struct BuiltinFn {
     public init<A: GalahRepresentable, B: GalahRepresentable>(_ ident: String, _ fn: @escaping (A, B) -> Void) {
         storage = .fn2 { a, b in
             return fn(
-                try Self.cast(a, for: ident),
-                try Self.cast(b, for: ident)
+                Self.cast(a, for: ident),
+                Self.cast(b, for: ident)
             )
         }
         signature = FnSignature(
@@ -127,7 +127,7 @@ public struct BuiltinFn {
     public init<Operand: GalahRepresentable>(unaryOp ident: String, _ fn: @escaping (Operand) -> Void) {
         storage = .unaryOp { operand in
             return fn(
-                try Self.cast(operand, for: ident)
+                Self.cast(operand, for: ident)
             )
         }
         signature = FnSignature(
@@ -140,8 +140,8 @@ public struct BuiltinFn {
     public init<Left: GalahRepresentable, Right: GalahRepresentable>(binaryOp ident: String, _ fn: @escaping (Left, Right) -> Void) {
         storage = .binaryOp { left, right in
             return fn(
-                try Self.cast(left, for: ident),
-                try Self.cast(right, for: ident)
+                Self.cast(left, for: ident),
+                Self.cast(right, for: ident)
             )
         }
         signature = FnSignature(
@@ -172,10 +172,15 @@ public struct BuiltinFn {
         }
     }
 
-    private static func cast<T>(_ argument: Any, for ident: String) throws -> T {
-        guard let argument = argument as? T else {
-            throw RichError("'\(ident)' expects argument 1 to be of type '\(T.self)', got '\(type(of: argument))'")
+    private static func cast<T>(_ argument: Any, for ident: String) -> T {
+        assert(
+            type(of: argument) == T.self,
+            "'\(ident)' expects argument 1 to be of type '\(T.self)', got '\(type(of: argument))'"
+        )
+        return withUnsafePointer(to: argument) { pointer in
+            pointer.withMemoryRebound(to: T.self, capacity: 1) { pointer in
+                pointer.pointee
+            }
         }
-        return argument
     }
 }
