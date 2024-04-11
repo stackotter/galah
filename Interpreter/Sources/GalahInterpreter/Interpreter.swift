@@ -72,7 +72,7 @@ public struct Interpreter {
     public func evaluate(_ ifStmt: CheckedAST.IfStmt, _ locals: [Any]) throws -> Any {
         let condition = try evaluate(ifStmt.ifBlock.condition, locals) as! Int
         if condition != 0 {
-            return try evaluate(ifStmt.ifBlock.condition, locals)
+            return try evaluate(ifStmt.ifBlock.block, locals)
         } else {
             for elseIfBlock in ifStmt.elseIfBlocks {
                 let condition = try evaluate(elseIfBlock.condition, locals) as! Int
