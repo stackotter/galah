@@ -46,7 +46,7 @@ public struct Param {
 }
 
 public enum Type: Hashable, CustomStringConvertible {
-    case nominal(String)
+    case nominal(String, typeParameters: [Type] = [])
 
     public static var void: Type {
         .nominal("Void")
@@ -58,8 +58,12 @@ public enum Type: Hashable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-            case let .nominal(name):
-                name
+            case let .nominal(name, typeParameters):
+                if typeParameters.isEmpty {
+                    name
+                } else {
+                    "\(name)<\(typeParameters.map(\.description).joined(separator: ", "))>"
+                }
         }
     }
 }
