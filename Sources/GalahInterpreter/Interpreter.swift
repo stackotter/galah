@@ -72,7 +72,11 @@ public struct Interpreter {
                 _ = try evaluate(expr.inner, locals)
                 return nil
             case let .return(expr):
-                return .return(try evaluate(expr.inner, locals))
+                if let expr {
+                    return .return(try evaluate(expr.inner, locals))
+                } else {
+                    return .return(Void())
+                }
             case let .if(ifStmt):
                 return try evaluate(ifStmt, locals)
         }

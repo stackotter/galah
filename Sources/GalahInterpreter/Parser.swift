@@ -82,11 +82,21 @@ public struct Parser {
         if peek() == .keyword(.if) {
             return .if(try parseIfStmt())
         } else if peek() == .keyword(.return) {
-            next()
-            skipTrivia()
-            return .return(try parseExpr())
+            return .return(try parseReturnStmt())
         } else {
             return .expr(try parseExpr())
+        }
+    }
+
+    private mutating func parseReturnStmt() throws -> Expr? {
+        try expect(.keyword(.return))
+        while let token = peek(), case let .trivia(trivia) = token, trivia != .whitespace(.newLine) {
+            next()
+        }
+        if peek() == .trivia(.whitespace(.newLine)) {
+            return nil
+        } else {
+            return try parseExpr()
         }
     }
 
@@ -287,7 +297,7 @@ public struct Parser {
         }
         guard foundWhitespace else {
             let token = peek()
-            throw RichError("Expected whitespace, got \(token?.noun ?? "an EOF")", at: peekLocation())
+            throw RichError("Expected whitespace, got \(token?.noun ?? "EOF")", at: peekLocation())
         }
     }
 

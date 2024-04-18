@@ -67,7 +67,7 @@ public enum Type: Hashable, CustomStringConvertible {
 public enum Stmt {
     case expr(Expr)
     case `if`(IfStmt)
-    case `return`(Expr)
+    case `return`(Expr?)
 }
 
 extension Stmt {

@@ -19,7 +19,7 @@ public struct CheckedAST {
 
     public enum Stmt {
         case `if`(IfStmt)
-        case `return`(Typed<Expr>)
+        case `return`(Typed<Expr>?)
         case expr(Typed<Expr>)
     }
 
