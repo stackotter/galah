@@ -6,6 +6,23 @@ public struct TypeChecker {
     typealias LocalsTable = [String: (index: Int, type: Type)]
     typealias Typed = CheckedAST.Typed
 
+    private struct Analyzed<T> {
+        var inner: T
+        var returnsOnAllPaths: Bool
+
+        init(_ inner: T, returnsOnAllPaths: Bool) {
+            self.inner = inner
+            self.returnsOnAllPaths = returnsOnAllPaths
+        }
+
+        func map<U>(_ action: (T) -> U) -> Analyzed<U> {
+            Analyzed<U>(
+                action(inner),
+                returnsOnAllPaths: returnsOnAllPaths
+            )
+        }
+    }
+
     let builtins: [BuiltinFn]
     let fnDecls: [FnDecl]
     let fnTable: [(CheckedAST.FnId, FnSignature)]
@@ -30,20 +47,30 @@ public struct TypeChecker {
             locals[param.ident] = (index: i, type: param.type)
         }
 
-        // TODO: Ensure that a value is returned from all paths if return type is non-void
-        return CheckedAST.Fn(signature: fn.signature, stmts: try checkStmts(fn.stmts, expecting: fn.signature.returnType, locals))
+        let analyzedStmts = try checkStmts(fn.stmts, expecting: fn.signature.returnType, locals)
+        if let returnType = fn.returnType, returnType != .nominal("Void") {
+            guard analyzedStmts.returnsOnAllPaths else {
+                throw RichError("Non-void function must return on all paths")
+            }
+        }
+
+        return CheckedAST.Fn(signature: fn.signature, stmts: analyzedStmts.inner)
     }
 
-    private func checkStmts(_ stmts: [Stmt], expecting returnType: Type, _ locals: LocalsTable) throws -> [CheckedAST.Stmt] {
-        try stmts.map { stmt in
+    private func checkStmts(_ stmts: [Stmt], expecting returnType: Type, _ locals: LocalsTable) throws -> Analyzed<[CheckedAST.Stmt]> {
+        let analyzedStmts = try stmts.map { stmt in
             try checkStmt(stmt, expecting: returnType, locals)
         }
+        return Analyzed(
+            analyzedStmts.map(\.inner),
+            returnsOnAllPaths: analyzedStmts.contains(where: \.returnsOnAllPaths)
+        )
     }
 
-    private func checkStmt(_ stmt: Stmt, expecting returnType: Type, _ locals: LocalsTable) throws -> CheckedAST.Stmt {
+    private func checkStmt(_ stmt: Stmt, expecting returnType: Type, _ locals: LocalsTable) throws -> Analyzed<CheckedAST.Stmt> {
         switch stmt {
             case let .if(ifStmt):
-                return .`if`(try checkIfStmt(ifStmt, expecting: returnType, locals))
+                return (try checkIfStmt(ifStmt, expecting: returnType, locals)).map(CheckedAST.Stmt.if)
             case let .return(expr):
                 let checkedExpr: Typed<CheckedAST.Expr>? = if let expr {
                     try checkExpr(expr, locals)
@@ -57,26 +84,30 @@ public struct TypeChecker {
                         throw RichError("Returned expected to return '\(returnType)', got 'Void'")
                     }
                 }
-                return .return(checkedExpr)
+                return Analyzed(.return(checkedExpr), returnsOnAllPaths: true)
             case let .expr(expr):
-                return .expr(try checkExpr(expr, locals))
+                return Analyzed(.expr(try checkExpr(expr, locals)), returnsOnAllPaths: false)
         }
     }
 
-    private func checkIfStmt(_ ifStmt: IfStmt, expecting returnType: Type, _ locals: LocalsTable) throws -> CheckedAST.IfStmt {
+    private func checkIfStmt(_ ifStmt: IfStmt, expecting returnType: Type, _ locals: LocalsTable) throws -> Analyzed<CheckedAST.IfStmt> {
         let condition = try checkExpr(ifStmt.condition, locals)
         guard condition.type == Int.type else {
             throw RichError("If statement condition must be of type '\(Int.type)', got \(condition.type)")
         }
+
+        let checkedIfBlock = try checkStmts(ifStmt.ifBlock, expecting: returnType, locals)
         let ifBlock = CheckedAST.IfBlock(
             condition: condition.inner,
-            block: try checkStmts(ifStmt.ifBlock, expecting: returnType, locals)
+            block: checkedIfBlock.inner
         )
+
         var elseIfBlocks: [CheckedAST.IfBlock] = []
         var elseBlock = ifStmt.else
 
         var checkedElseBlock: [CheckedAST.Stmt]?
 
+        var returnsOnAllPaths = checkedIfBlock.returnsOnAllPaths
         while elseBlock != nil {
             switch elseBlock {
                 case let .elseIf(ifBlock):
@@ -84,23 +115,32 @@ public struct TypeChecker {
                     guard condition.type == Int.type else {
                         throw RichError("If statement condition must be of type '\(Int.type)', got \(condition.type)")
                     }
+                    let checkedBlock = try checkStmts(ifBlock.ifBlock, expecting: returnType, locals)
                     elseIfBlocks.append(CheckedAST.IfBlock(
                         condition: condition.inner,
-                        block: try checkStmts(ifBlock.ifBlock, expecting: returnType, locals)
+                        block: checkedBlock.inner
                     ))
                     elseBlock = ifBlock.else
+                    returnsOnAllPaths = returnsOnAllPaths && checkedBlock.returnsOnAllPaths
                 case let .else(stmts):
-                    checkedElseBlock = try checkStmts(stmts, expecting: returnType, locals)
+                    let checkedBlock = try checkStmts(stmts, expecting: returnType, locals)
+                    checkedElseBlock = checkedBlock.inner
+                    returnsOnAllPaths = returnsOnAllPaths && checkedBlock.returnsOnAllPaths
                     elseBlock = nil
                 case nil:
+                    // No else block
+                    returnsOnAllPaths = false
                     break
             }
         }
 
-        return CheckedAST.IfStmt(
-            ifBlock: ifBlock,
-            elseIfBlocks: elseIfBlocks,
-            elseBlock: checkedElseBlock
+        return Analyzed(
+            CheckedAST.IfStmt(
+                ifBlock: ifBlock,
+                elseIfBlocks: elseIfBlocks,
+                elseBlock: checkedElseBlock
+            ),
+            returnsOnAllPaths: returnsOnAllPaths
         )
     }
 
