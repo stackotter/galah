@@ -44,24 +44,35 @@ public struct Interpreter {
         },
     ]
 
+    public enum StmtEffect {
+        case `return`(Any)
+    }
+
     var ast: CheckedAST
 
     public init(_ ast: CheckedAST) {
         self.ast = ast
     }
 
-    public func evaluate(_ stmts: [CheckedAST.Stmt], _ locals: [Any]) throws -> Any {
-        var result: Any = Void()
+    public func evaluate(_ stmts: [CheckedAST.Stmt], _ locals: [Any]) throws -> StmtEffect? {
         for stmt in stmts {
-            result = try evaluate(stmt, locals)
+            switch try evaluate(stmt, locals) {
+                case .some(.return(let value)):
+                    return .return(value)
+                case .none:
+                    continue
+            }
         }
-        return result
+        return nil
     }
 
-    public func evaluate(_ stmt: CheckedAST.Stmt, _ locals: [Any]) throws -> Any {
+    public func evaluate(_ stmt: CheckedAST.Stmt, _ locals: [Any]) throws -> StmtEffect? {
         switch stmt {
             case let .expr(expr):
-                return try evaluate(expr, locals)
+                _ = try evaluate(expr.inner, locals)
+                return nil
+            case let .return(expr):
+                return .return(try evaluate(expr.inner, locals))
             case let .if(ifStmt):
                 return try evaluate(ifStmt, locals)
         }
@@ -76,7 +87,7 @@ public struct Interpreter {
         }
     }
 
-    public func evaluate(_ ifStmt: CheckedAST.IfStmt, _ locals: [Any]) throws -> Any {
+    public func evaluate(_ ifStmt: CheckedAST.IfStmt, _ locals: [Any]) throws -> StmtEffect? {
         let condition: Int = Self.cast(try evaluate(ifStmt.ifBlock.condition, locals))
         if condition != 0 {
             return try evaluate(ifStmt.ifBlock.block, locals)
@@ -90,7 +101,7 @@ public struct Interpreter {
             if let elseBlock = ifStmt.elseBlock {
                 return try evaluate(elseBlock, locals)
             }
-            return Void()
+            return nil
         }
     }
 
@@ -100,13 +111,18 @@ public struct Interpreter {
                 return value
             case let .fnCall(fnCallExpr):
                 let arguments = try fnCallExpr.arguments.map { argument in
-                    try evaluate(argument, locals)
+                    try evaluate(argument.inner, locals)
                 }
                 switch fnCallExpr.id {
                     case let .builtin(index):
                         return try ast.builtins[index].call(with: arguments)
                     case let .userDefined(index):
-                        return try evaluate(ast.fns[index].stmts, arguments)
+                        return switch try evaluate(ast.fns[index].stmts, arguments) {
+                            case .some(.return(let value)):
+                                value
+                            case .none:
+                                Void()
+                        }
                 }
             case let .localVar(index):
                 return locals.withUnsafeBufferPointer { $0[index] }

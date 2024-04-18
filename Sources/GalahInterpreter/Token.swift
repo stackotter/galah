@@ -2,6 +2,7 @@ public enum Keyword: String {
     case fn
     case `if`
     case `else`
+    case `return`
 }
 
 public enum Whitespace: Character {
@@ -17,6 +18,12 @@ public enum Trivia: Equatable {
 
 public struct Op: Equatable {
     var token: String
+}
+
+extension Op: CustomStringConvertible {
+    public var description: String {
+        token
+    }
 }
 
 public enum Token: Equatable {

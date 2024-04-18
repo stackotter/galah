@@ -4,16 +4,7 @@ public struct TypeChecker {
     }
 
     typealias LocalsTable = [String: (index: Int, type: Type)]
-
-    public struct Typed<Inner> {
-        public var inner: Inner
-        public var type: Type
-
-        public init(_ inner: Inner, _ type: Type) {
-            self.inner = inner
-            self.type = type
-        }
-    }
+    typealias Typed = CheckedAST.Typed
 
     let builtins: [BuiltinFn]
     let fnDecls: [FnDecl]
@@ -39,32 +30,39 @@ public struct TypeChecker {
             locals[param.ident] = (index: i, type: param.type)
         }
 
-        return CheckedAST.Fn(signature: fn.signature, stmts: try check(fn.stmts, locals))
+        // TODO: Ensure that a value is returned from all paths if return type is non-void
+        return CheckedAST.Fn(signature: fn.signature, stmts: try check(fn.stmts, expecting: fn.signature.returnType, locals))
     }
 
-    private func check(_ stmts: [Stmt], _ locals: LocalsTable) throws -> [CheckedAST.Stmt] {
+    private func check(_ stmts: [Stmt], expecting returnType: Type, _ locals: LocalsTable) throws -> [CheckedAST.Stmt] {
         try stmts.map { stmt in
-            try check(stmt, locals)
+            try check(stmt, expecting: returnType, locals)
         }
     }
 
-    private func check(_ stmt: Stmt, _ locals: LocalsTable) throws -> CheckedAST.Stmt {
+    private func check(_ stmt: Stmt, expecting returnType: Type, _ locals: LocalsTable) throws -> CheckedAST.Stmt {
         switch stmt {
             case let .if(ifStmt):
-                .`if`(try check(ifStmt, locals))
+                return .`if`(try check(ifStmt, expecting: returnType, locals))
+            case let .return(expr):
+                let checkedExpr = try check(expr, locals)
+                guard checkedExpr.type == returnType else {
+                    throw RichError("Returned expression expected to be of type '\(returnType)', got '\(expr)' (of type '\(checkedExpr.type)')")
+                }
+                return .return(checkedExpr)
             case let .expr(expr):
-                .expr(try check(expr, locals).inner)
+                return .expr(try check(expr, locals))
         }
     }
 
-    private func check(_ ifStmt: IfStmt, _ locals: LocalsTable) throws -> CheckedAST.IfStmt {
+    private func check(_ ifStmt: IfStmt, expecting returnType: Type, _ locals: LocalsTable) throws -> CheckedAST.IfStmt {
         let condition = try check(ifStmt.condition, locals)
         guard condition.type == Int.type else {
             throw RichError("If statement condition must be of type '\(Int.type)', got \(condition.type)")
         }
         let ifBlock = CheckedAST.IfBlock(
             condition: condition.inner,
-            block: try check(ifStmt.ifBlock, locals)
+            block: try check(ifStmt.ifBlock, expecting: returnType, locals)
         )
         var elseIfBlocks: [CheckedAST.IfBlock] = []
         var elseBlock = ifStmt.else
@@ -80,11 +78,11 @@ public struct TypeChecker {
                     }
                     elseIfBlocks.append(CheckedAST.IfBlock(
                         condition: condition.inner,
-                        block: try check(ifBlock.ifBlock, locals)
+                        block: try check(ifBlock.ifBlock, expecting: returnType, locals)
                     ))
                     elseBlock = ifBlock.else
                 case let .else(stmts):
-                    checkedElseBlock = try check(stmts, locals)
+                    checkedElseBlock = try check(stmts, expecting: returnType, locals)
                     elseBlock = nil
                 case nil:
                     break
@@ -110,7 +108,7 @@ public struct TypeChecker {
                 }
                 let (id, signature) = try resolveFn(fnCallExpr.ident, arguments.map(\.type))
                 return Typed(
-                    .fnCall(CheckedAST.FnCallExpr(id: id, arguments: arguments.map(\.inner))),
+                    .fnCall(CheckedAST.FnCallExpr(id: id, arguments: arguments)),
                     signature.returnType
                 )
             case let .ident(ident):
@@ -122,7 +120,7 @@ public struct TypeChecker {
                 let operand = try check(unaryOpExpr.operand, locals)
                 let (id, signature) = try resolveFn(unaryOpExpr.op.token, [operand.type])
                 return Typed(
-                    .fnCall(CheckedAST.FnCallExpr(id: id, arguments: [operand.inner])),
+                    .fnCall(CheckedAST.FnCallExpr(id: id, arguments: [operand])),
                     signature.returnType
                 )
             case let .binaryOp(binaryOpExpr):
@@ -130,7 +128,7 @@ public struct TypeChecker {
                 let rightOperand = try check(binaryOpExpr.rightOperand, locals)
                 let (id, signature) = try resolveFn(binaryOpExpr.op.token, [leftOperand.type, rightOperand.type])
                 return Typed(
-                    .fnCall(CheckedAST.FnCallExpr(id: id, arguments: [leftOperand.inner, rightOperand.inner])),
+                    .fnCall(CheckedAST.FnCallExpr(id: id, arguments: [leftOperand, rightOperand])),
                     signature.returnType
                 )
             case let .parenthesizedExpr(inner):

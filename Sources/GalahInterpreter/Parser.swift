@@ -80,9 +80,13 @@ public struct Parser {
 
     private mutating func parseStmt() throws -> Stmt {
         if peek() == .keyword(.if) {
-            .if(try parseIfStmt())
+            return .if(try parseIfStmt())
+        } else if peek() == .keyword(.return) {
+            next()
+            skipTrivia()
+            return .return(try parseExpr())
         } else {
-            .expr(try parseExpr())
+            return .expr(try parseExpr())
         }
     }
 
@@ -119,11 +123,16 @@ public struct Parser {
         skipTrivia()
         var stmts: [Stmt] = []
         while let token = peek(), token != .rightBrace {
-            stmts.append(try parseStmt())
-            do {
-                try expectNewLineSkippingTrivia()
-            } catch {
-                break
+            let stmt = try parseStmt()
+            stmts.append(stmt)
+            if !stmt.endsWithCodeBlock {
+                do {
+                    try expectNewLineSkippingTrivia()
+                } catch {
+                    break
+                }
+            } else {
+                skipTrivia()
             }
         }
         try expect(.rightBrace)

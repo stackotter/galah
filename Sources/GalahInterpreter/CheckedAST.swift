@@ -2,6 +2,16 @@ public struct CheckedAST {
     public var builtins: [BuiltinFn]
     public var fns: [Fn]
 
+    public struct Typed<Inner> {
+        public var inner: Inner
+        public var type: Type
+
+        public init(_ inner: Inner, _ type: Type) {
+            self.inner = inner
+            self.type = type
+        }
+    }
+
     public struct Fn {
         public var signature: FnSignature
         public var stmts: [Stmt]
@@ -9,7 +19,8 @@ public struct CheckedAST {
 
     public enum Stmt {
         case `if`(IfStmt)
-        case expr(Expr)
+        case `return`(Typed<Expr>)
+        case expr(Typed<Expr>)
     }
 
     public struct IfStmt {
@@ -36,7 +47,7 @@ public struct CheckedAST {
 
     public struct FnCallExpr {
         public var id: FnId
-        public var arguments: [Expr]
+        public var arguments: [Typed<Expr>]
     }
 
     public func fn(named ident: String, withParamTypes paramTypes: [Type]) -> Fn? {

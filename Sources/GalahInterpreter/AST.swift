@@ -46,7 +46,7 @@ public struct Param {
 }
 
 public enum Type: Hashable, CustomStringConvertible {
-    case nominal(String, typeParameters: [Type] = [])
+    case nominal(String)
 
     public static var void: Type {
         .nominal("Void")
@@ -58,12 +58,8 @@ public enum Type: Hashable, CustomStringConvertible {
 
     public var description: String {
         switch self {
-            case let .nominal(name, typeParameters):
-                if typeParameters.isEmpty {
-                    name
-                } else {
-                    "\(name)<\(typeParameters.map(\.description).joined(separator: ", "))>"
-                }
+            case let .nominal(name):
+                name
         }
     }
 }
@@ -71,6 +67,18 @@ public enum Type: Hashable, CustomStringConvertible {
 public enum Stmt {
     case expr(Expr)
     case `if`(IfStmt)
+    case `return`(Expr)
+}
+
+extension Stmt {
+    public var endsWithCodeBlock: Bool {
+        switch self {
+            case .if:
+                true
+            case .expr, .return:
+                false
+        }
+    }
 }
 
 public struct IfStmt {
@@ -92,6 +100,27 @@ public indirect enum Expr {
     case unaryOp(UnaryOpExpr)
     case binaryOp(BinaryOpExpr)
     case parenthesizedExpr(Expr)
+}
+
+extension Expr: CustomStringConvertible {
+    public var description: String {
+        switch self {
+            case .stringLiteral(let value):
+                return "\"\(value)\""
+            case .integerLiteral(let value):
+                return "\(value)"
+            case .fnCall(let fnCall):
+                return "\(fnCall.ident)(\(fnCall.arguments.map(\.description).joined(separator: ", ")))"
+            case .ident(let ident):
+                return ident
+            case .unaryOp(let unaryOp):
+                return "\(unaryOp.op)\(unaryOp.operand)"
+            case .binaryOp(let binaryOp):
+                return "\(binaryOp.leftOperand) + \(binaryOp.rightOperand)"
+            case .parenthesizedExpr(let expr):
+                return "(\(expr))"
+        }
+    }
 }
 
 public struct UnaryOpExpr {
