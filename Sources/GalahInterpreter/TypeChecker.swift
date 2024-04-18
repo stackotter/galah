@@ -48,10 +48,8 @@ public struct TypeChecker {
         }
 
         let analyzedStmts = try checkStmts(fn.stmts, expecting: fn.signature.returnType, locals)
-        if let returnType = fn.returnType, returnType != .nominal("Void") {
-            guard analyzedStmts.returnsOnAllPaths else {
-                throw RichError("Non-void function must return on all paths")
-            }
+        guard fn.signature.returnType == .nominal("Void") || analyzedStmts.returnsOnAllPaths else {
+            throw RichError("Non-void function must return on all paths")
         }
 
         return CheckedAST.Fn(signature: fn.signature, stmts: analyzedStmts.inner)
@@ -61,8 +59,14 @@ public struct TypeChecker {
         let analyzedStmts = try stmts.map { stmt in
             try checkStmt(stmt, expecting: returnType, locals)
         }
+        let lastReachableIndex = analyzedStmts.firstIndex(where: \.returnsOnAllPaths)
+        if let lastReachableIndex, lastReachableIndex < stmts.count - 1 {
+            // TODO: Create a diagnostics system for emitting warnings (and multiple warnings/errors in a single pass)
+            // TODO: Update Parser to enrich AST with source location information for better warnings
+            print("warning: Unreachable statements")
+        }
         return Analyzed(
-            analyzedStmts.map(\.inner),
+            analyzedStmts[...(lastReachableIndex ?? analyzedStmts.count - 1)].map(\.inner),
             returnsOnAllPaths: analyzedStmts.contains(where: \.returnsOnAllPaths)
         )
     }
