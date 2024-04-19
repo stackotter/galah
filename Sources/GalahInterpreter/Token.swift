@@ -3,6 +3,7 @@ public enum Keyword: String {
     case `if`
     case `else`
     case `return`
+    case `let`
 }
 
 public enum Whitespace: Character {
@@ -18,6 +19,8 @@ public enum Trivia: Equatable {
 
 public struct Op: Equatable {
     var token: String
+
+    static let assignment = Op(token: "=")
 }
 
 extension Op: CustomStringConvertible {

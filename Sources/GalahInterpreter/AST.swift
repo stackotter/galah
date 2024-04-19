@@ -64,10 +64,17 @@ public enum Type: Hashable, CustomStringConvertible {
     }
 }
 
+public struct VarDecl {
+    public var ident: String
+    public var type: Type?
+    public var value: Expr
+}
+
 public enum Stmt {
     case expr(Expr)
     case `if`(IfStmt)
     case `return`(Expr?)
+    case `let`(VarDecl)
 }
 
 extension Stmt {
@@ -75,7 +82,7 @@ extension Stmt {
         switch self {
             case .if:
                 true
-            case .expr, .return:
+            case .expr, .return, .let:
                 false
         }
     }

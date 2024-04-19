@@ -14,12 +14,21 @@ public struct CheckedAST {
 
     public struct Fn {
         public var signature: FnSignature
+        /// Number of local variables created/used within the function. The first n are expected
+        /// to be the function's arguments.
+        public var localCount: Int
         public var stmts: [Stmt]
+    }
+
+    public struct VarDecl {
+        public var localIndex: Int
+        public var value: Typed<Expr>
     }
 
     public enum Stmt {
         case `if`(IfStmt)
         case `return`(Typed<Expr>?)
+        case `let`(VarDecl)
         case expr(Typed<Expr>)
     }
 

@@ -83,6 +83,8 @@ public struct Parser {
             return .if(try parseIfStmt())
         } else if peek() == .keyword(.return) {
             return .return(try parseReturnStmt())
+        } else if peek() == .keyword(.let) {
+            return .let(try parseLetStmt())
         } else {
             return .expr(try parseExpr())
         }
@@ -98,6 +100,34 @@ public struct Parser {
         } else {
             return try parseExpr()
         }
+    }
+
+    private mutating func parseLetStmt() throws -> VarDecl {
+        try expect(.keyword(.let))
+        try expectWhitespaceSkippingTrivia()
+
+        let ident = try expectIdent()
+        skipTrivia()
+
+        let type: Type?
+        if peek() == .colon {
+            next()
+            skipTrivia()
+            type = try parseType()
+            skipTrivia()
+        } else {
+            type = nil
+        }
+
+        try expect(.op(.assignment))
+        skipTrivia()
+
+        let value = try parseExpr()
+        return VarDecl(
+            ident: ident,
+            type: type,
+            value: value
+        )
     }
 
     private mutating func parseIfStmt() throws -> IfStmt {

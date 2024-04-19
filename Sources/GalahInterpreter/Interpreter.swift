@@ -17,7 +17,7 @@ public struct Interpreter {
             throw RichError("Missing 'main' function")
         }
 
-        _ = try interpreter.evaluate(main.stmts, [])
+        _ = try interpreter.evaluate(main, arguments: [])
     }
 
     static let builtins: [BuiltinFn] = [
@@ -54,9 +54,20 @@ public struct Interpreter {
         self.ast = ast
     }
 
-    public func evaluate(_ stmts: [CheckedAST.Stmt], _ locals: [Any]) throws -> StmtEffect? {
+    public func evaluate(_ fn: CheckedAST.Fn, arguments: [Any]) throws -> Any {
+        var locals = arguments
+        locals.append(contentsOf: Array(repeating: Void(), count: fn.localCount - arguments.count))
+        switch try evaluate(fn.stmts, &locals) {
+            case let .some(.return(value)):
+                return value
+            case .none:
+                return Void()
+        }
+    }
+
+    public func evaluate(_ stmts: [CheckedAST.Stmt], _ locals: inout [Any]) throws -> StmtEffect? {
         for stmt in stmts {
-            switch try evaluate(stmt, locals) {
+            switch try evaluate(stmt, &locals) {
                 case .some(.return(let value)):
                     return .return(value)
                 case .none:
@@ -66,19 +77,22 @@ public struct Interpreter {
         return nil
     }
 
-    public func evaluate(_ stmt: CheckedAST.Stmt, _ locals: [Any]) throws -> StmtEffect? {
+    public func evaluate(_ stmt: CheckedAST.Stmt, _ locals: inout [Any]) throws -> StmtEffect? {
         switch stmt {
             case let .expr(expr):
-                _ = try evaluate(expr.inner, locals)
+                _ = try evaluate(expr.inner, &locals)
                 return nil
             case let .return(expr):
                 if let expr {
-                    return .return(try evaluate(expr.inner, locals))
+                    return .return(try evaluate(expr.inner, &locals))
                 } else {
                     return .return(Void())
                 }
+            case let .let(varDecl):
+                locals[varDecl.localIndex] = try evaluate(varDecl.value.inner, &locals)
+                return nil
             case let .if(ifStmt):
-                return try evaluate(ifStmt, locals)
+                return try evaluate(ifStmt, &locals)
         }
     }
 
@@ -91,42 +105,37 @@ public struct Interpreter {
         }
     }
 
-    public func evaluate(_ ifStmt: CheckedAST.IfStmt, _ locals: [Any]) throws -> StmtEffect? {
-        let condition: Int = Self.cast(try evaluate(ifStmt.ifBlock.condition, locals))
+    public func evaluate(_ ifStmt: CheckedAST.IfStmt, _ locals: inout [Any]) throws -> StmtEffect? {
+        let condition: Int = Self.cast(try evaluate(ifStmt.ifBlock.condition, &locals))
         if condition != 0 {
-            return try evaluate(ifStmt.ifBlock.block, locals)
+            return try evaluate(ifStmt.ifBlock.block, &locals)
         } else {
             for elseIfBlock in ifStmt.elseIfBlocks {
-                let condition: Int = Self.cast(try evaluate(elseIfBlock.condition, locals))
+                let condition: Int = Self.cast(try evaluate(elseIfBlock.condition, &locals))
                 if condition != 0 {
-                    return try evaluate(elseIfBlock.block, locals)
+                    return try evaluate(elseIfBlock.block, &locals)
                 }
             }
             if let elseBlock = ifStmt.elseBlock {
-                return try evaluate(elseBlock, locals)
+                return try evaluate(elseBlock, &locals)
             }
             return nil
         }
     }
 
-    public func evaluate(_ expr: CheckedAST.Expr, _ locals: [Any]) throws -> Any {
+    public func evaluate(_ expr: CheckedAST.Expr, _ locals: inout [Any]) throws -> Any {
         switch expr {
             case let .constant(value):
                 return value
             case let .fnCall(fnCallExpr):
                 let arguments = try fnCallExpr.arguments.map { argument in
-                    try evaluate(argument.inner, locals)
+                    try evaluate(argument.inner, &locals)
                 }
                 switch fnCallExpr.id {
                     case let .builtin(index):
                         return try ast.builtins[index].call(with: arguments)
                     case let .userDefined(index):
-                        return switch try evaluate(ast.fns[index].stmts, arguments) {
-                            case .some(.return(let value)):
-                                value
-                            case .none:
-                                Void()
-                        }
+                        return try evaluate(ast.fns[index], arguments: arguments)
                 }
             case let .localVar(index):
                 return locals.withUnsafeBufferPointer { $0[index] }
