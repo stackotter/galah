@@ -61,7 +61,7 @@ public struct CheckedAST {
 
     public func fn(named ident: String, withParamTypes paramTypes: [Type]) -> Fn? {
         fns.first { fn in
-            fn.signature.ident == ident && fn.signature.paramTypes == paramTypes
+            *fn.signature.ident == ident && fn.signature.paramTypes.map(\.inner) == paramTypes
         }
     }
 }

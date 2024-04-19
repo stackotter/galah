@@ -1,48 +1,43 @@
 public struct AST {
-    public var decls: [Decl]
+    public var fnDecls: [WithSpan<FnDecl>]
 
-    public init(decls: [Decl]) {
-        self.decls = decls
-    }
-}
-
-public enum Decl {
-    case fn(FnDecl)
-
-    public var ident: String {
-        switch self {
-            case let .fn(decl): decl.signature.ident
-        }
-    }
-
-    public var asFnDecl: FnDecl? {
-        switch self {
-            case let .fn(fnDecl):
-                fnDecl
-        }
+    public init(fnDecls: [WithSpan<FnDecl>]) {
+        self.fnDecls = fnDecls
     }
 }
 
 public struct FnSignature: Hashable {
-    public var ident: String
-    public var paramTypes: [Type]
-    public var returnType: Type
+    public var ident: WithSpan<String>
+    public var paramTypes: [WithSpan<Type>]
+    public var returnType: WithSpan<Type>?
+
+    public init(ident: WithSpan<String>, paramTypes: [WithSpan<Type>], returnType: WithSpan<Type>? = nil) {
+        self.ident = ident
+        self.paramTypes = paramTypes
+        self.returnType = returnType
+    }
+
+    public init(builtin ident: String, paramTypes: [Type], returnType: Type? = nil) {
+        self.ident = WithSpan(builtin: ident)
+        self.paramTypes = paramTypes.map(WithSpan.init(builtin:))
+        self.returnType = returnType.map(WithSpan.init(builtin:))
+    }
 }
 
 public struct FnDecl {
-    public var ident: String
-    public var params: [Param]
-    public var returnType: Type?
-    public var stmts: [Stmt]
+    public var ident: WithSpan<String>
+    public var params: [WithSpan<Param>]
+    public var returnType: WithSpan<Type>?
+    public var stmts: [WithSpan<Stmt>]
 
     public var signature: FnSignature {
-        FnSignature(ident: ident, paramTypes: params.map(\.type), returnType: returnType ?? .nominal("Void"))
+        FnSignature(ident: ident, paramTypes: params.map(\.type), returnType: returnType)
     }
 }
 
 public struct Param {
-    public var ident: String
-    public var type: Type
+    public var ident: WithSpan<String>
+    public var type: WithSpan<Type>
 }
 
 public enum Type: Hashable, CustomStringConvertible {
@@ -65,15 +60,15 @@ public enum Type: Hashable, CustomStringConvertible {
 }
 
 public struct VarDecl {
-    public var ident: String
-    public var type: Type?
-    public var value: Expr
+    public var ident: WithSpan<String>
+    public var type: WithSpan<Type>?
+    public var value: WithSpan<Expr>
 }
 
 public enum Stmt {
     case expr(Expr)
     case `if`(IfStmt)
-    case `return`(Expr?)
+    case `return`(WithSpan<Expr>?)
     case `let`(VarDecl)
 }
 
@@ -90,12 +85,12 @@ extension Stmt {
 
 public struct IfStmt {
     public indirect enum ElseBlock {
-        case elseIf(IfStmt)
-        case `else`([Stmt])
+        case elseIf(WithSpan<IfStmt>)
+        case `else`([WithSpan<Stmt>])
     }
 
-    public var condition: Expr
-    public var ifBlock: [Stmt]
+    public var condition: WithSpan<Expr>
+    public var ifBlock: [WithSpan<Stmt>]
     public var `else`: ElseBlock?
 }
 
@@ -106,7 +101,7 @@ public indirect enum Expr {
     case ident(String)
     case unaryOp(UnaryOpExpr)
     case binaryOp(BinaryOpExpr)
-    case parenthesizedExpr(Expr)
+    case parenthesizedExpr(WithSpan<Expr>)
 }
 
 extension Expr: CustomStringConvertible {
@@ -117,7 +112,7 @@ extension Expr: CustomStringConvertible {
             case .integerLiteral(let value):
                 return "\(value)"
             case .fnCall(let fnCall):
-                return "\(fnCall.ident)(\(fnCall.arguments.map(\.description).joined(separator: ", ")))"
+                return "\(fnCall.ident)(\(fnCall.arguments.map(\.inner.description).joined(separator: ", ")))"
             case .ident(let ident):
                 return ident
             case .unaryOp(let unaryOp):
@@ -131,21 +126,21 @@ extension Expr: CustomStringConvertible {
 }
 
 public struct UnaryOpExpr {
-    let op: Op
-    let operand: Expr
+    let op: WithSpan<Op>
+    let operand: WithSpan<Expr>
 }
 
 public struct BinaryOpExpr {
-    let op: Op
-    let leftOperand: Expr
-    let rightOperand: Expr
+    let op: WithSpan<Op>
+    let leftOperand: WithSpan<Expr>
+    let rightOperand: WithSpan<Expr>
 }
 
 public struct FnCallExpr {
-    public var ident: String
-    public var arguments: [Expr]
+    public var ident: WithSpan<String>
+    public var arguments: [WithSpan<Expr>]
 }
 
 public struct Tuple {
-    public var elements: [Expr]
+    public var elements: [WithSpan<Expr>]
 }

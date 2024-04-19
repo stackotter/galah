@@ -1,3 +1,5 @@
+import UtilityMacros
+
 public struct Parser {
     let tokens: [RichToken]
     var index = 0
@@ -12,42 +14,45 @@ public struct Parser {
         self.tokens = tokens
     }
 
+    private mutating func withSpan<T>(_ parse: (inout Parser) throws -> T) rethrows -> WithSpan<T> {
+        let start = peekLocation()
+        let result = try parse(&self)
+        let end = location()
+        return WithSpan(result, start.span(until: end))
+    }
+
     private consuming func parse() throws -> AST {
-        var decls: [Decl] = []
+        var fnDecls: [WithSpan<FnDecl>] = []
 
         skipTrivia()
         while let token = peek() {
             switch token {
                 case .keyword(.fn):
-                    decls.append(.fn(try parseFnDecl()))
+                    fnDecls.append(try parseFnDeclWithSpan())
                 default:
                     throw RichError("Unexpected token '\(token)' while parsing top-level declarations", at: location())
             }
             skipTrivia()
         }
 
-        return AST(decls: decls)
+        return AST(fnDecls: fnDecls)
     }
 
+    @AlsoWithSpan
     private mutating func parseFnDecl() throws -> FnDecl {
         try expect(.keyword(.fn))
         try expectWhitespaceSkippingTrivia()
 
-        let ident = try expectIdent()
+        let ident = try expectIdentWithSpan()
 
         try expect(.leftParen)
         skipTrivia()
         
-        var params: [Param] = []
+        var params: [WithSpan<Param>] = []
         while let token = peek(), token != .rightParen {
-            let ident = try expectIdent()
-            skipTrivia()
-            try expect(.colon)
-            skipTrivia()
+            params.append(try parseFnParamWithSpan())
 
-            let type = try parseType()
-            params.append(Param(ident: ident, type: type))
-
+            skipTrivia()
             guard peek() == .comma else {
                 break
             }
@@ -59,11 +64,11 @@ public struct Parser {
 
         skipTrivia()
 
-        let returnType: Type?
+        let returnType: WithSpan<Type>?
         if case let .op(op) = peek(), op.token == "->" {
             next()
             skipTrivia()
-            returnType = try parseType()
+            returnType = try parseTypeWithSpan()
             skipTrivia()
         } else {
             returnType = nil
@@ -78,11 +83,23 @@ public struct Parser {
         )
     }
 
+    @AlsoWithSpan
+    private mutating func parseFnParam() throws -> Param {
+        let ident = try expectIdentWithSpan()
+        skipTrivia()
+        try expect(.colon)
+        skipTrivia()
+
+        let type = try parseTypeWithSpan()
+        return Param(ident: ident, type: type)
+    }
+
+    @AlsoWithSpan
     private mutating func parseStmt() throws -> Stmt {
         if peek() == .keyword(.if) {
             return .if(try parseIfStmt())
         } else if peek() == .keyword(.return) {
-            return .return(try parseReturnStmt())
+            return .return(try parseReturnStmtWithSpan())
         } else if peek() == .keyword(.let) {
             return .let(try parseLetStmt())
         } else {
@@ -90,7 +107,7 @@ public struct Parser {
         }
     }
 
-    private mutating func parseReturnStmt() throws -> Expr? {
+    private mutating func parseReturnStmtWithSpan() throws -> WithSpan<Expr>? {
         try expect(.keyword(.return))
         while let token = peek(), case let .trivia(trivia) = token, trivia != .whitespace(.newLine) {
             next()
@@ -98,7 +115,7 @@ public struct Parser {
         if peek() == .trivia(.whitespace(.newLine)) {
             return nil
         } else {
-            return try parseExpr()
+            return try parseExprWithSpan()
         }
     }
 
@@ -106,14 +123,14 @@ public struct Parser {
         try expect(.keyword(.let))
         try expectWhitespaceSkippingTrivia()
 
-        let ident = try expectIdent()
+        let ident = try expectIdentWithSpan()
         skipTrivia()
 
-        let type: Type?
+        let type: WithSpan<Type>?
         if peek() == .colon {
             next()
             skipTrivia()
-            type = try parseType()
+            type = try parseTypeWithSpan()
             skipTrivia()
         } else {
             type = nil
@@ -122,7 +139,7 @@ public struct Parser {
         try expect(.op(.assignment))
         skipTrivia()
 
-        let value = try parseExpr()
+        let value = try parseExprWithSpan()
         return VarDecl(
             ident: ident,
             type: type,
@@ -130,10 +147,11 @@ public struct Parser {
         )
     }
 
+    @AlsoWithSpan
     private mutating func parseIfStmt() throws -> IfStmt {
         try expect(.keyword(.if))
         try expectWhitespaceSkippingTrivia()
-        let condition = try parseExpr()
+        let condition = try parseExprWithSpan()
         skipTrivia()
         let ifBlock = try parseCodeBlock()
         skipTrivia()
@@ -145,7 +163,7 @@ public struct Parser {
 
             switch peek() {
                 case .keyword(.if):
-                    `else` = .elseIf(try parseIfStmt())
+                    `else` = .elseIf(try parseIfStmtWithSpan())
                 case .leftBrace:
                     `else` = .else(try parseCodeBlock())
                 case let token:
@@ -158,14 +176,14 @@ public struct Parser {
         return IfStmt(condition: condition, ifBlock: ifBlock, else: `else`)
     }
 
-    private mutating func parseCodeBlock() throws -> [Stmt] {
+    private mutating func parseCodeBlock() throws -> [WithSpan<Stmt>] {
         try expect(.leftBrace)
         skipTrivia()
-        var stmts: [Stmt] = []
+        var stmts: [WithSpan<Stmt>] = []
         while let token = peek(), token != .rightBrace {
-            let stmt = try parseStmt()
+            let stmt = try parseStmtWithSpan()
             stmts.append(stmt)
-            if !stmt.endsWithCodeBlock {
+            if !stmt.inner.endsWithCodeBlock {
                 do {
                     try expectNewLineSkippingTrivia()
                 } catch {
@@ -179,18 +197,21 @@ public struct Parser {
         return stmts
     }
 
+    @AlsoWithSpan
     private mutating func parseExpr() throws -> Expr {
-        guard let token = next() else {
+        // TODO: Parse parenthesized expressions
+        guard let token = richNext() else {
             throw RichError("Unexpected EOF while parsing expression", at: location())
         }
 
+        let startLocation = location()
         let expr: Expr
-        switch token {
+        switch token.token {
             case let .ident(ident):
                 if peek() == .leftParen {
                     expr = .fnCall(
                         FnCallExpr(
-                            ident: ident,
+                            ident: WithSpan(ident, token.span),
                             arguments: try parseTuple().elements
                         )
                     )
@@ -205,35 +226,45 @@ public struct Parser {
                 if case .trivia = peek() {
                     throw RichError("A prefix unary operator must not be separated from its operand", at: location())
                 }
-                expr = .unaryOp(UnaryOpExpr(op: op, operand: try parseExpr()))
+                expr = .unaryOp(UnaryOpExpr(
+                    op: WithSpan(op, token.span),
+                    operand: try parseExprWithSpan()
+                ))
             default:
-                throw RichError("Expected an expression, got \(token.noun)", at: location())
+                throw RichError("Expected an expression, got \(token.token.noun)", at: location())
         }
+        let endLocation = location()
+        let exprWithSpan = WithSpan(expr, startLocation.span(until: endLocation))
 
         let indexBeforeTrivia = index
         let hasWhitespaceBeforeOp = skipTrivia().foundWhitespace
-        if case let .op(op) = peek() {
+        if let token = richPeek(), case let .op(op) = token.token {
             next()
             let operatorLocation = location()
             let hasWhitespaceAfterOp = skipTrivia().foundWhitespace
             guard hasWhitespaceBeforeOp == hasWhitespaceAfterOp else {
                 throw RichError("A binary operator must either have whitespace on both sides or none at all", at: operatorLocation)
             }
-            let rightOperand = try parseExpr()
-            return .binaryOp(BinaryOpExpr(op: op, leftOperand: expr, rightOperand: rightOperand))
+            let rightOperand = try parseExprWithSpan()
+            return .binaryOp(BinaryOpExpr(
+                op: WithSpan(op, token.span),
+                leftOperand: exprWithSpan,
+                rightOperand: rightOperand
+            ))
         } else {
             index = indexBeforeTrivia
             return expr
         }
     }
 
+    @AlsoWithSpan
     private mutating func parseTuple() throws -> Tuple {
         try expect(.leftParen)
         skipTrivia()
 
-        var elements: [Expr] = []
+        var elements: [WithSpan<Expr>] = []
         while let token = peek(), token != .rightParen {
-            elements.append(try parseExpr())
+            elements.append(try parseExprWithSpan())
             skipTrivia()
 
             guard peek() == .comma else {
@@ -250,16 +281,21 @@ public struct Parser {
         return Tuple(elements: elements)
     }
 
+    @AlsoWithSpan
     private mutating func parseType() throws -> Type {
         .nominal(try expectIdent())
     }
 
-    private func peek() -> Token? {
+    private func richPeek() -> RichToken? {
         if index < tokens.count {
-            return tokens[index].token
+            return tokens[index]
         } else {
             return nil
         }
+    }
+
+    private func peek() -> Token? {
+        richPeek()?.token
     }
 
     /// The location of the token most recently returned by ``Parser/next``.
@@ -274,13 +310,18 @@ public struct Parser {
     }
 
     @discardableResult
-    private mutating func next() -> Token? {
-        let token = peek()
+    private mutating func richNext() -> RichToken? {
+        let token = richPeek()
         if token != nil {
             previousIndex = index
             index += 1
         }
         return token
+    }
+
+    @discardableResult
+    private mutating func next() -> Token? {
+        richNext()?.token
     }
 
     private struct TriviaSkippingResult {
@@ -352,6 +393,7 @@ public struct Parser {
         }
     }
 
+    @AlsoWithSpan
     private mutating func expectIdent() throws -> String {
         let token = next()
         guard case let .ident(ident) = token else {

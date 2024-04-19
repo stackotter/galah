@@ -135,4 +135,27 @@ public enum Token: Equatable {
             case let .op(op): Size(columns: op.token.count)
         }
     }
+
+    public var characterCount: Int {
+        switch self {
+            case let .ident(ident): ident.count
+            case .leftParen: 1
+            case .rightParen: 1
+            case .leftBrace: 1
+            case .rightBrace: 1
+            case .colon: 1
+            case .comma: 1
+            case let .keyword(keyword): keyword.rawValue.count
+            case let .stringLiteral(content): content.count + 2
+            case let .integerLiteral(value): value.description.count
+            case let .trivia(trivia):
+                switch trivia {
+                    case .whitespace:
+                        1
+                    case let .comment(content):
+                        content.count + 2
+                }
+            case let .op(op): op.token.count
+        }
+    }
 }

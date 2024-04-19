@@ -24,7 +24,7 @@ public struct BuiltinFn {
         storage = .fn0 {
             fn()
         }
-        signature = FnSignature(ident: ident, paramTypes: [], returnType: R.type)
+        signature = FnSignature(builtin: ident, paramTypes: [], returnType: R.type)
     }
 
     public init<A: GalahRepresentable, R: GalahRepresentable>(_ ident: String, _ fn: @escaping (A) -> R) {
@@ -32,7 +32,7 @@ public struct BuiltinFn {
             return fn(Self.cast(a, for: ident))
         }
         signature = FnSignature(
-            ident: ident,
+            builtin: ident,
             paramTypes: [A.type],
             returnType: R.type
         )
@@ -48,7 +48,7 @@ public struct BuiltinFn {
             )
         }
         signature = FnSignature(
-            ident: ident,
+            builtin: ident,
             paramTypes: [A.type, B.type],
             returnType: R.type
         )
@@ -61,7 +61,7 @@ public struct BuiltinFn {
             )
         }
         signature = FnSignature(
-            ident: ident,
+            builtin: ident,
             paramTypes: [Operand.type],
             returnType: R.type
         )
@@ -75,7 +75,7 @@ public struct BuiltinFn {
             )
         }
         signature = FnSignature(
-            ident: ident,
+            builtin: ident,
             paramTypes: [Left.type, Right.type],
             returnType: R.type
         )
@@ -85,7 +85,7 @@ public struct BuiltinFn {
         storage = .fn0 {
             fn()
         }
-        signature = FnSignature(ident: ident, paramTypes: [], returnType: .void)
+        signature = FnSignature(builtin: ident, paramTypes: [], returnType: .void)
     }
 
     public init<A: GalahRepresentable>(_ ident: String, _ fn: @escaping (A) -> Void) {
@@ -93,7 +93,7 @@ public struct BuiltinFn {
             return fn(Self.cast(a, for: ident))
         }
         signature = FnSignature(
-            ident: ident,
+            builtin: ident,
             paramTypes: [A.type],
             returnType: .void
         )
@@ -104,7 +104,7 @@ public struct BuiltinFn {
             return fn(Self.cast(a, for: ident))
         }
         signature = FnSignature(
-            ident: ident,
+            builtin: ident,
             paramTypes: [.any],
             returnType: .void
         )
@@ -118,7 +118,7 @@ public struct BuiltinFn {
             )
         }
         signature = FnSignature(
-            ident: ident,
+            builtin: ident,
             paramTypes: [A.type, B.type],
             returnType: .void
         )
@@ -131,7 +131,7 @@ public struct BuiltinFn {
             )
         }
         signature = FnSignature(
-            ident: ident,
+            builtin: ident,
             paramTypes: [Operand.type],
             returnType: .void
         )
@@ -145,7 +145,7 @@ public struct BuiltinFn {
             )
         }
         signature = FnSignature(
-            ident: ident,
+            builtin: ident,
             paramTypes: [Left.type, Right.type],
             returnType: .void
         )
