@@ -11,6 +11,10 @@ extension FileHandle: TextOutputStream {
     }
 }
 
+public func eprint(_ message: String) {
+    print(message, to: &standardError)
+}
+
 @main
 struct Cli: ParsableCommand {
     @Argument(help: "Script to run", transform: URL.init(fileURLWithPath:))
@@ -21,16 +25,18 @@ struct Cli: ParsableCommand {
         do {
             sourceCode = try String(contentsOf: file)
         } catch {
-            print("Failed to read '\(file.path)'", to: &standardError)
+            eprint("Failed to read '\(file.path)'")
             return
         }
 
         do {
-            try Interpreter.run(sourceCode)
-        } catch let error as RichError {
-            print(error.formatted(withSourceCode: sourceCode), to: &standardError)
+            try Interpreter.run(sourceCode) { diagnostic in
+                eprint(diagnostic.formatted(withSourceCode: sourceCode))
+            }
+        } catch let error as Diagnostic {
+            eprint(error.formatted(withSourceCode: sourceCode))
         } catch {
-            print(error, to: &standardError)
+            eprint("\(error)")
         }
     }
 }

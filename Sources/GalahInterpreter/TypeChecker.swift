@@ -1,5 +1,5 @@
 public struct TypeChecker {
-    public static func check(_ ast: AST, _ builtins: [BuiltinFn]) throws -> CheckedAST {
+    public static func check(_ ast: AST, _ builtins: [BuiltinFn]) throws -> WithDiagnostics<CheckedAST> {
         try TypeChecker(ast, builtins).check()
     }
 
@@ -9,10 +9,12 @@ public struct TypeChecker {
     private struct Analyzed<T> {
         var inner: T
         var returnsOnAllPaths: Bool
+        var diagnostics: [Diagnostic]
 
-        init(_ inner: T, returnsOnAllPaths: Bool) {
+        init(_ inner: T, returnsOnAllPaths: Bool, diagnostics: [Diagnostic] = []) {
             self.inner = inner
             self.returnsOnAllPaths = returnsOnAllPaths
+            self.diagnostics = diagnostics
         }
 
         func map<U>(_ action: (T) -> U) -> Analyzed<U> {
@@ -40,6 +42,7 @@ public struct TypeChecker {
 
         private var locals: [Local]
         private var scopes: [[String: LocalIndex]]
+        var diagnostics: [Diagnostic]
 
         private var innermostScope: [String: LocalIndex] {
             get {
@@ -55,6 +58,7 @@ public struct TypeChecker {
             self.expectedReturnType = expectedReturnType
             locals = []
             scopes = [[:]]
+            diagnostics = []
         }
 
         @discardableResult
@@ -89,6 +93,10 @@ public struct TypeChecker {
             }
             return nil
         }
+
+        mutating func diagnose(_ diagnostic: Diagnostic) {
+            diagnostics.append(diagnostic)
+        }
     }
 
     let builtins: [BuiltinFn]
@@ -101,15 +109,14 @@ public struct TypeChecker {
         fnTable = try Self.buildFnLookupTable(fnDecls, builtins)
     }
 
-    private func check() throws -> CheckedAST {
-        var fns: [CheckedAST.Fn] = []
-        for fn in fnDecls {
-            fns.append(try checkFn(fn))
+    private func check() throws -> WithDiagnostics<CheckedAST> {
+        let fns: WithDiagnostics<[CheckedAST.Fn]> = try fnDecls.map(checkFn).collect()
+        return fns.map { fns in
+            CheckedAST(builtins: builtins, fns: fns)
         }
-        return CheckedAST(builtins: builtins, fns: fns)
     }
 
-    private func checkFn(_ fn: WithSpan<FnDecl>) throws -> CheckedAST.Fn {
+    private func checkFn(_ fn: WithSpan<FnDecl>) throws -> WithDiagnostics<CheckedAST.Fn> {
         let span = fn.span
         let fn = *fn
         var context = FnContext(expectedReturnType: fn.signature.returnType?.inner ?? .void)
@@ -120,10 +127,14 @@ public struct TypeChecker {
         let analyzedStmts = try checkStmts(fn.stmts, &context)
         let returnType = fn.signature.returnType?.inner ?? .void
         guard returnType == .void || analyzedStmts.returnsOnAllPaths else {
-            throw RichError("Non-void function must return on all paths", at: span)
+            // TODO: Attach the diagnostic to the last statement in each offending path
+            throw Diagnostic(error: "Non-void function must return on all paths", at: span)
         }
 
-        return CheckedAST.Fn(signature: fn.signature, localCount: context.localCount, stmts: analyzedStmts.inner)
+        return WithDiagnostics(
+            CheckedAST.Fn(signature: fn.signature, localCount: context.localCount, stmts: analyzedStmts.inner),
+            context.diagnostics
+        )
     }
 
     private func checkStmts(_ stmts: [WithSpan<Stmt>], _ context: inout FnContext) throws -> Analyzed<[CheckedAST.Stmt]> {
@@ -137,7 +148,7 @@ public struct TypeChecker {
         if let lastReachableIndex, lastReachableIndex < stmts.count - 1 {
             // TODO: Create a diagnostics system for emitting warnings (and multiple warnings/errors in a single pass)
             // TODO: Update Parser to enrich AST with source location information for better warnings
-            print("warning: Unreachable statements")
+            context.diagnose(Diagnostic(warning: "warning: Unreachable statements", at: stmts[lastReachableIndex + 1].span))
         }
         return Analyzed(
             analyzedStmts[...(lastReachableIndex ?? analyzedStmts.count - 1)].map(\.inner),
@@ -157,13 +168,13 @@ public struct TypeChecker {
                 }
                 guard (checkedExpr?.type ?? .void) == context.expectedReturnType else {
                     if let expr, let checkedExpr {
-                        throw RichError(
-                            "Function expected to return '\(context.expectedReturnType)', got expression of type '\(checkedExpr.type)'",
+                        throw Diagnostic(
+                            error: "Function expected to return '\(context.expectedReturnType)', got expression of type '\(checkedExpr.type)'",
                             at: expr.span
                         )
                     } else {
-                        throw RichError(
-                            "Function expected to return '\(context.expectedReturnType)', got 'Void'",
+                        throw Diagnostic(
+                            error: "Function expected to return '\(context.expectedReturnType)', got 'Void'",
                             at: stmt.span
                         )
                     }
@@ -172,15 +183,15 @@ public struct TypeChecker {
             case let .let(varDecl):
                 let checkedExpr = try checkExpr(varDecl.value, &context)
                 if let type = varDecl.type, checkedExpr.type != *type {
-                    throw RichError(
-                        "Let binding '\(varDecl.ident)' expected expression of type '\(type)', got expression of type '\(checkedExpr.type)'",
+                    throw Diagnostic(
+                        error: "Let binding '\(varDecl.ident)' expected expression of type '\(type)', got expression of type '\(checkedExpr.type)'",
                         at: varDecl.value.span
                     )
                 }
                 // TODO: Do we allow shadowing within the same scope level? (it should be as easy as just removing this check)
                 if context.localInInnermostScope(for: *varDecl.ident) != nil {
-                    throw RichError(
-                        "Duplicate definition of '\(varDecl.ident)' within current scope",
+                    throw Diagnostic(
+                        error: "Duplicate definition of '\(varDecl.ident)' within current scope",
                         at: varDecl.ident.span
                     )
                 }
@@ -194,8 +205,8 @@ public struct TypeChecker {
     private func checkIfStmt(_ ifStmt: IfStmt, _ context: inout FnContext) throws -> Analyzed<CheckedAST.IfStmt> {
         let condition = try checkExpr(ifStmt.condition, &context)
         guard condition.type == Int.type else {
-            throw RichError(
-                "If statement condition must be of type '\(Int.type)', got \(condition.type)",
+            throw Diagnostic(
+                error: "If statement condition must be of type '\(Int.type)', got \(condition.type)",
                 at: ifStmt.condition.span
             )
         }
@@ -217,8 +228,8 @@ public struct TypeChecker {
                 case let .elseIf(ifBlock):
                     let condition = try checkExpr(ifBlock.condition, &context)
                     guard condition.type == Int.type else {
-                        throw RichError(
-                            "If statement condition must be of type '\(Int.type)', got \(condition.type)",
+                        throw Diagnostic(
+                            error: "If statement condition must be of type '\(Int.type)', got \(condition.type)",
                             at: ifBlock.condition.span
                         )
                     }
@@ -268,7 +279,7 @@ public struct TypeChecker {
                 )
             case let .ident(ident):
                 guard let (index, local) = context.local(for: ident) else {
-                    throw RichError("No such variable '\(ident)'", at: expr.span)
+                    throw Diagnostic(error: "No such variable '\(ident)'", at: expr.span)
                 }
                 return Typed(.localVar(index), local.type)
             case let .unaryOp(unaryOpExpr):
@@ -308,8 +319,8 @@ public struct TypeChecker {
             } else {
                 ""
             }
-            throw RichError(
-                "No such function '\(*ident)' with parameters '(\(parameters))'"
+            throw Diagnostic(
+                error: "No such function '\(*ident)' with parameters '(\(parameters))'"
                 + additionalContext,
                 at: span
             )
@@ -331,9 +342,8 @@ public struct TypeChecker {
             if isDuplicate {
                 let paramTypes = fn.signature.paramTypes.map(\.inner.description).joined(separator: ", ")
                 let returnType = fn.signature.returnType?.inner ?? .void
-                // TODO: Enrich error message with more information about the two clashing signatures
-                throw RichError(
-                    "Duplicate definition of builtin '\(fn.signature.ident)' with parameter types '(\(paramTypes)) -> \(returnType)'",
+                throw Diagnostic(
+                    error: "Duplicate definition of builtin '\(fn.signature.ident)' with parameter types '(\(paramTypes)) -> \(returnType)'",
                     at: fn.signature.ident.span
                 )
             }
@@ -349,7 +359,7 @@ public struct TypeChecker {
             if isDuplicate {
                 let paramTypes = fn.signature.paramTypes.map(\.inner.description).joined(separator: ", ")
                 let returnType = fn.signature.returnType?.inner ?? .void
-                throw RichError("Duplicate definition of '\(fn.ident)' with type '(\(paramTypes)) -> \(returnType)'", at: span)
+                throw Diagnostic(error: "Duplicate definition of '\(fn.ident)' with type '(\(paramTypes)) -> \(returnType)'", at: span)
             }
             table.append((.userDefined(index: i), fn.signature))
         }

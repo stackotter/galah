@@ -30,7 +30,7 @@ public struct Parser {
                 case .keyword(.fn):
                     fnDecls.append(try parseFnDeclWithSpan())
                 default:
-                    throw RichError("Unexpected token '\(token)' while parsing top-level declarations", at: location())
+                    throw Diagnostic(error: "Unexpected token '\(token)' while parsing top-level declarations", at: location())
             }
             skipTrivia()
         }
@@ -167,7 +167,7 @@ public struct Parser {
                 case .leftBrace:
                     `else` = .else(try parseCodeBlock())
                 case let token:
-                    throw RichError("Expected 'if' or '{', got \(token?.noun ?? "EOF")", at: peekLocation())
+                    throw Diagnostic(error: "Expected 'if' or '{', got \(token?.noun ?? "EOF")", at: peekLocation())
             }
         } else {
             `else` = nil
@@ -201,7 +201,7 @@ public struct Parser {
     private mutating func parseExpr() throws -> Expr {
         // TODO: Parse parenthesized expressions
         guard let token = richNext() else {
-            throw RichError("Unexpected EOF while parsing expression", at: location())
+            throw Diagnostic(error: "Unexpected EOF while parsing expression", at: location())
         }
 
         let startLocation = location()
@@ -224,14 +224,14 @@ public struct Parser {
                 expr = .integerLiteral(value)
             case let .op(op):
                 if case .trivia = peek() {
-                    throw RichError("A prefix unary operator must not be separated from its operand", at: location())
+                    throw Diagnostic(error: "A prefix unary operator must not be separated from its operand", at: location())
                 }
                 expr = .unaryOp(UnaryOpExpr(
                     op: WithSpan(op, token.span),
                     operand: try parseExprWithSpan()
                 ))
             default:
-                throw RichError("Expected an expression, got \(token.token.noun)", at: location())
+                throw Diagnostic(error: "Expected an expression, got \(token.token.noun)", at: location())
         }
         let endLocation = location()
 
@@ -244,7 +244,7 @@ public struct Parser {
             let operatorLocation = location()
             let hasWhitespaceAfterOp = skipTrivia().foundWhitespace
             guard hasWhitespaceBeforeOp == hasWhitespaceAfterOp else {
-                throw RichError("A binary operator must either have whitespace on both sides or none at all", at: operatorLocation)
+                throw Diagnostic(error: "A binary operator must either have whitespace on both sides or none at all", at: operatorLocation)
             }
 
             let rightOperand = try parseExprWithSpan()
@@ -376,7 +376,7 @@ public struct Parser {
         }
         guard foundWhitespace else {
             let token = peek()
-            throw RichError("Expected whitespace, got \(token?.noun ?? "EOF")", at: peekLocation())
+            throw Diagnostic(error: "Expected whitespace, got \(token?.noun ?? "EOF")", at: peekLocation())
         }
     }
 
@@ -390,14 +390,14 @@ public struct Parser {
         }
         guard foundNewLine else {
             let token = peek()
-            throw RichError("Expected a newline, got \(token?.noun ?? "an EOF")", at: peekLocation())
+            throw Diagnostic(error: "Expected a newline, got \(token?.noun ?? "an EOF")", at: peekLocation())
         }
     }
 
     private mutating func expect(_ token: Token) throws {
         let nextToken = next()
         guard let nextToken = nextToken, nextToken == token else {
-            throw RichError("Expected \(token.noun), got \(nextToken?.noun ?? "an EOF")", at: location())
+            throw Diagnostic(error: "Expected \(token.noun), got \(nextToken?.noun ?? "an EOF")", at: location())
         }
     }
 
@@ -405,7 +405,7 @@ public struct Parser {
     private mutating func expectIdent() throws -> String {
         let token = next()
         guard case let .ident(ident) = token else {
-            throw RichError("Expected an ident, got \(token?.noun ?? "an EOF")", at: location())
+            throw Diagnostic(error: "Expected an ident, got \(token?.noun ?? "an EOF")", at: location())
         }
         return ident
     }

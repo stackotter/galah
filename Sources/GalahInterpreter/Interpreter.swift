@@ -1,20 +1,17 @@
-func todo(_ message: String) -> Never {
-    print("todo: \(message)")
-    exit(1)
-}
-
 public struct Interpreter {
-    public static func run(_ code: String) throws {
+    public static func run(_ code: String, _ handleDiagnostic: (Diagnostic) -> Void = { _ in }) throws {
         let tokens = try Lexer.lex(code)
 
         let ast = try Parser.parse(tokens)
 
-        let checkedAST = try TypeChecker.check(ast, builtins)
+        let typeCheckerResult = try TypeChecker.check(ast, builtins)
+        let checkedAST = typeCheckerResult.inner
+        typeCheckerResult.diagnostics.forEach(handleDiagnostic)
 
         let interpreter = Interpreter(checkedAST)
 
         guard let main = interpreter.ast.fn(named: "main", withParamTypes: []) else {
-            throw RichError("Missing 'main' function", at: nil)
+            throw Diagnostic(error: "Missing 'main' function", at: nil)
         }
 
         _ = try interpreter.evaluate(main, arguments: [])

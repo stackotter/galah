@@ -41,7 +41,7 @@ public enum Lexer {
                             case "t": escapedChar = "\t"
                             case "r": escapedChar = "\r"
                             case "0": escapedChar = "\0"
-                            default: throw RichError("Invalid escape sequence '\\\(c)'", at: buffer.location.back(1))
+                            default: throw Diagnostic(error: "Invalid escape sequence '\\\(c)'", at: buffer.location.back(1))
                         }
                         escapeNextChar = false
                         content.append(escapedChar)
@@ -53,7 +53,7 @@ public enum Lexer {
                 }
 
                 if buffer.peek() != "\"" {
-                    throw RichError("Unterminated string literal", at: startLocation)
+                    throw Diagnostic(error: "Unterminated string literal", at: startLocation)
                 } else {
                     buffer.next()
                     tokens.append(RichToken(.stringLiteral(content), at: location))
@@ -98,7 +98,7 @@ public enum Lexer {
                 }
                 tokens.append(RichToken(.op(Op(token: token)), at: location))
             } else {
-                throw RichError("Unexpected character '\(c)'", at: buffer.location)
+                throw Diagnostic(error: "Unexpected character '\(c)'", at: buffer.location)
             }
         }
 

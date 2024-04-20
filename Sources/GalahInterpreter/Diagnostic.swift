@@ -1,32 +1,66 @@
-public struct RichError: Error, CustomStringConvertible {
+public struct Diagnostic: Error, CustomStringConvertible {
+    public var level: Level
     public var message: String
     public var source: Source?
+
+    public enum Level: String, CustomStringConvertible {
+        case warning
+        case error
+
+        public var description: String {
+            rawValue
+        }
+    }
 
     public enum Source {
         case location(Location)
         case span(Span)
     }
 
-    public var errorLine: String {
+    public init(warning message: String, at location: Location?) {
+        level = .warning
+        self.message = message
+        self.source = location.map(Source.location)
+    }
+
+    public init(warning message: String, at span: Span) {
+        level = .warning
+        self.message = message
+        self.source = .span(span)
+    }
+
+    public init(error message: String, at location: Location?) {
+        level = .error
+        self.message = message
+        self.source = location.map(Source.location)
+    }
+
+    public init(error message: String, at span: Span) {
+        level = .error
+        self.message = message
+        self.source = .span(span)
+    }
+
+    public var diagnosticLine: String {
         switch source {
             case let .location(location):
-                "error:\(location.line):\(location.column): \(message)"
+                "\(level):\(location.line):\(location.column): \(message)"
             case let .span(span):
-                "error:\(span.shortDescription): \(message)"
+                "\(level):\(span.shortDescription): \(message)"
             case .none:
-                "error: \(message)"
+                "\(level): \(message)"
         }
     }
 
     public var description: String {
-        errorLine
+        diagnosticLine
     }
 
     /// - Precondition: `maxCodeLines` must be at least 1
     public func formatted(withSourceCode sourceCode: String, maxCodeLines: Int = 5) -> String {
         let annotation = annotate(sourceCode, maxCodeLines: maxCodeLines) ?? ""
         return [
-            errorLine,
+            diagnosticLine,
             annotation
         ].joined(separator: "\n")
     }
@@ -58,12 +92,17 @@ public struct RichError: Error, CustomStringConvertible {
         let errorLines = Array(lines[startLine...endLine])
         let indent = "    "
         if errorLines.count > 1 {
-            return errorLines[..<maxCodeLines]
+            let ellipsis = if maxCodeLines < errorLines.count {
+                "\n\(indent)..."
+            } else {
+                ""
+            }
+            return errorLines[0..<min(maxCodeLines, errorLines.count)]
                 .map { line in
                     indent + line
                 }
                 .joined(separator: "\n")
-                + "\n\(indent)..."
+                + ellipsis
         } else {
             let startColumn = startLocation.column
             let annotationWidth = endLocation.column - startLocation.column - 1
@@ -77,14 +116,30 @@ public struct RichError: Error, CustomStringConvertible {
             )
         }
     }
+}
 
-    public init(_ message: String, at location: Location?) {
-        self.message = message
-        self.source = location.map(Source.location)
+public struct WithDiagnostics<Inner> {
+    public var inner: Inner
+    public var diagnostics: [Diagnostic]
+
+    public init(_ inner: Inner, _ diagnostics: [Diagnostic] = []) {
+        self.inner = inner
+        self.diagnostics = diagnostics
     }
 
-    public init(_ message: String, at span: Span) {
-        self.message = message
-        self.source = .span(span)
+    public func map<T>(_ map: (Inner) -> T) -> WithDiagnostics<T> {
+        WithDiagnostics<T>(
+            map(inner),
+            diagnostics
+        )
+    }
+}
+
+public extension [WithDiagnostics<CheckedAST.Fn>] {
+    func collect() -> WithDiagnostics<[CheckedAST.Fn]> {
+        WithDiagnostics(
+            map(\.inner),
+            map(\.diagnostics).flatMap { $0 }
+        )
     }
 }
