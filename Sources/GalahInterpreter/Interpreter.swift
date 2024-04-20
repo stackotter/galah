@@ -1,5 +1,12 @@
 public struct Interpreter {
-    public static func run(_ code: String, _ handleDiagnostic: (Diagnostic) -> Void = { _ in }) throws {
+    /// - Parameters:
+    ///   - builtins: The builtin functions that will be available to the script.
+    ///     Defaults to ``Interpreter/defaultBuiltins``.
+    public static func run(
+        _ code: String,
+        builtins: [BuiltinFn] = Self.defaultBuiltins,
+        diagnosticHandler handleDiagnostic: (Diagnostic) -> Void = { _ in }
+    ) throws {
         let tokens = try Lexer.lex(code)
 
         let ast = try Parser.parse(tokens)
@@ -17,7 +24,7 @@ public struct Interpreter {
         _ = try interpreter.evaluate(main, arguments: [])
     }
 
-    static let builtins: [BuiltinFn] = [
+    public static let defaultBuiltins: [BuiltinFn] = [
         BuiltinFn(binaryOp: "+") { (a: Int, b: Int) in
             a + b
         },
