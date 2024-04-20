@@ -199,7 +199,6 @@ public struct Parser {
 
     @AlsoWithSpan
     private mutating func parseExpr() throws -> Expr {
-        // TODO: Parse parenthesized expressions
         guard let token = richNext() else {
             throw Diagnostic(error: "Unexpected EOF while parsing expression", at: location())
         }
@@ -230,6 +229,12 @@ public struct Parser {
                     op: WithSpan(op, token.span),
                     operand: try parseExprWithSpan()
                 ))
+            case .leftParen:
+                skipTrivia()
+                let inner = try parseExprWithSpan()
+                skipTrivia()
+                try expect(.rightParen)
+                expr = .parenthesizedExpr(inner)
             default:
                 throw Diagnostic(error: "Expected an expression, got \(token.token.noun)", at: location())
         }

@@ -146,8 +146,6 @@ public struct TypeChecker {
 
         let lastReachableIndex = analyzedStmts.firstIndex(where: \.returnsOnAllPaths)
         if let lastReachableIndex, lastReachableIndex < stmts.count - 1 {
-            // TODO: Create a diagnostics system for emitting warnings (and multiple warnings/errors in a single pass)
-            // TODO: Update Parser to enrich AST with source location information for better warnings
             context.diagnose(Diagnostic(warning: "warning: Unreachable statements", at: stmts[lastReachableIndex + 1].span))
         }
         return Analyzed(
