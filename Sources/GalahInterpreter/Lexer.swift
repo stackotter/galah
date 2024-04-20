@@ -41,7 +41,11 @@ public enum Lexer {
                             case "t": escapedChar = "\t"
                             case "r": escapedChar = "\r"
                             case "0": escapedChar = "\0"
-                            default: throw Diagnostic(error: "Invalid escape sequence '\\\(c)'", at: buffer.location.back(1))
+                            default:
+                                throw Diagnostic(
+                                    error: "Invalid escape sequence '\\\(c)'",
+                                    at: buffer.location.back(1)
+                                )
                         }
                         escapeNextChar = false
                         content.append(escapedChar)

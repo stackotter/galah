@@ -61,7 +61,7 @@ public struct Diagnostic: Error, CustomStringConvertible {
         let annotation = annotate(sourceCode, maxCodeLines: maxCodeLines) ?? ""
         return [
             diagnosticLine,
-            annotation
+            annotation,
         ].joined(separator: "\n")
     }
 
@@ -92,11 +92,12 @@ public struct Diagnostic: Error, CustomStringConvertible {
         let errorLines = Array(lines[startLine...endLine])
         let indent = "    "
         if errorLines.count > 1 {
-            let ellipsis = if maxCodeLines < errorLines.count {
-                "\n\(indent)..."
-            } else {
-                ""
-            }
+            let ellipsis =
+                if maxCodeLines < errorLines.count {
+                    "\n\(indent)..."
+                } else {
+                    ""
+                }
             return errorLines[0..<min(maxCodeLines, errorLines.count)]
                 .map { line in
                     indent + line
@@ -110,10 +111,9 @@ public struct Diagnostic: Error, CustomStringConvertible {
                 (startColumn > 1 ? String(repeating: " ", count: startLocation.column - 1) : "")
                 + "^"
                 + (annotationWidth > 0 ? String(repeating: "~", count: annotationWidth) : "")
-            return (
-                indent + errorLines[0] + "\n"
-                + indent + annotation
-            )
+            return
+                (indent + errorLines[0] + "\n"
+                + indent + annotation)
         }
     }
 }
@@ -135,8 +135,8 @@ public struct WithDiagnostics<Inner> {
     }
 }
 
-public extension [WithDiagnostics<CheckedAST.Fn>] {
-    func collect() -> WithDiagnostics<[CheckedAST.Fn]> {
+extension [WithDiagnostics<CheckedAST.Fn>] {
+    public func collect() -> WithDiagnostics<[CheckedAST.Fn]> {
         WithDiagnostics(
             map(\.inner),
             map(\.diagnostics).flatMap { $0 }

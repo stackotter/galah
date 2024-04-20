@@ -30,7 +30,10 @@ public struct Parser {
                 case .keyword(.fn):
                     fnDecls.append(try parseFnDeclWithSpan())
                 default:
-                    throw Diagnostic(error: "Unexpected token '\(token)' while parsing top-level declarations", at: location())
+                    throw Diagnostic(
+                        error: "Unexpected token '\(token)' while parsing top-level declarations",
+                        at: location()
+                    )
             }
             skipTrivia()
         }
@@ -47,7 +50,7 @@ public struct Parser {
 
         try expect(.leftParen)
         skipTrivia()
-        
+
         var params: [WithSpan<Param>] = []
         while let token = peek(), token != .rightParen {
             params.append(try parseFnParamWithSpan())
@@ -109,7 +112,9 @@ public struct Parser {
 
     private mutating func parseReturnStmtWithSpan() throws -> WithSpan<Expr>? {
         try expect(.keyword(.return))
-        while let token = peek(), case let .trivia(trivia) = token, trivia != .whitespace(.newLine) {
+        while let token = peek(),
+            case let .trivia(trivia) = token, trivia != .whitespace(.newLine)
+        {
             next()
         }
         if peek() == .trivia(.whitespace(.newLine)) {
@@ -167,12 +172,15 @@ public struct Parser {
                 case .leftBrace:
                     `else` = .else(try parseCodeBlock())
                 case let token:
-                    throw Diagnostic(error: "Expected 'if' or '{', got \(token?.noun ?? "EOF")", at: peekLocation())
+                    throw Diagnostic(
+                        error: "Expected 'if' or '{', got \(token?.noun ?? "EOF")",
+                        at: peekLocation()
+                    )
             }
         } else {
             `else` = nil
         }
-        
+
         return IfStmt(condition: condition, ifBlock: ifBlock, else: `else`)
     }
 
@@ -223,12 +231,16 @@ public struct Parser {
                 expr = .integerLiteral(value)
             case let .op(op):
                 if case .trivia = peek() {
-                    throw Diagnostic(error: "A prefix unary operator must not be separated from its operand", at: location())
+                    throw Diagnostic(
+                        error: "A prefix unary operator must not be separated from its operand",
+                        at: location()
+                    )
                 }
-                expr = .unaryOp(UnaryOpExpr(
-                    op: WithSpan(op, token.span),
-                    operand: try parseExprWithSpan()
-                ))
+                expr = .unaryOp(
+                    UnaryOpExpr(
+                        op: WithSpan(op, token.span),
+                        operand: try parseExprWithSpan()
+                    ))
             case .leftParen:
                 skipTrivia()
                 let inner = try parseExprWithSpan()
@@ -236,7 +248,10 @@ public struct Parser {
                 try expect(.rightParen)
                 expr = .parenthesizedExpr(inner)
             default:
-                throw Diagnostic(error: "Expected an expression, got \(token.token.noun)", at: location())
+                throw Diagnostic(
+                    error: "Expected an expression, got \(token.token.noun)",
+                    at: location()
+                )
         }
         let endLocation = location()
 
@@ -249,16 +264,22 @@ public struct Parser {
             let operatorLocation = location()
             let hasWhitespaceAfterOp = skipTrivia().foundWhitespace
             guard hasWhitespaceBeforeOp == hasWhitespaceAfterOp else {
-                throw Diagnostic(error: "A binary operator must either have whitespace on both sides or none at all", at: operatorLocation)
+                throw Diagnostic(
+                    error:
+                        "A binary operator must either have whitespace on both sides or none at all",
+                    at: operatorLocation
+                )
             }
 
             let rightOperand = try parseExprWithSpan()
             let exprWithSpan = WithSpan(expr, startLocation.span(until: endLocation))
-            return .binaryOp(BinaryOpExpr(
-                op: WithSpan(op, token.span),
-                leftOperand: exprWithSpan,
-                rightOperand: rightOperand
-            ))
+            return .binaryOp(
+                BinaryOpExpr(
+                    op: WithSpan(op, token.span),
+                    leftOperand: exprWithSpan,
+                    rightOperand: rightOperand
+                )
+            )
         } else {
             previousIndex = previousIndexBeforeTrivia
             index = indexBeforeTrivia
@@ -381,7 +402,10 @@ public struct Parser {
         }
         guard foundWhitespace else {
             let token = peek()
-            throw Diagnostic(error: "Expected whitespace, got \(token?.noun ?? "EOF")", at: peekLocation())
+            throw Diagnostic(
+                error: "Expected whitespace, got \(token?.noun ?? "EOF")",
+                at: peekLocation()
+            )
         }
     }
 
@@ -395,14 +419,20 @@ public struct Parser {
         }
         guard foundNewLine else {
             let token = peek()
-            throw Diagnostic(error: "Expected a newline, got \(token?.noun ?? "an EOF")", at: peekLocation())
+            throw Diagnostic(
+                error: "Expected a newline, got \(token?.noun ?? "an EOF")",
+                at: peekLocation()
+            )
         }
     }
 
     private mutating func expect(_ token: Token) throws {
         let nextToken = next()
         guard let nextToken = nextToken, nextToken == token else {
-            throw Diagnostic(error: "Expected \(token.noun), got \(nextToken?.noun ?? "an EOF")", at: location())
+            throw Diagnostic(
+                error: "Expected \(token.noun), got \(nextToken?.noun ?? "an EOF")",
+                at: location()
+            )
         }
     }
 
@@ -410,7 +440,10 @@ public struct Parser {
     private mutating func expectIdent() throws -> String {
         let token = next()
         guard case let .ident(ident) = token else {
-            throw Diagnostic(error: "Expected an ident, got \(token?.noun ?? "an EOF")", at: location())
+            throw Diagnostic(
+                error: "Expected an ident, got \(token?.noun ?? "an EOF")",
+                at: location()
+            )
         }
         return ident
     }

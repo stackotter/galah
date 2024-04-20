@@ -1,5 +1,7 @@
 public struct TypeChecker {
-    public static func check(_ ast: AST, _ builtins: [BuiltinFn]) throws -> WithDiagnostics<CheckedAST> {
+    public static func check(_ ast: AST, _ builtins: [BuiltinFn]) throws -> WithDiagnostics<
+        CheckedAST
+    > {
         try TypeChecker(ast, builtins).check()
     }
 
@@ -132,12 +134,16 @@ public struct TypeChecker {
         }
 
         return WithDiagnostics(
-            CheckedAST.Fn(signature: fn.signature, localCount: context.localCount, stmts: analyzedStmts.inner),
+            CheckedAST.Fn(
+                signature: fn.signature, localCount: context.localCount, stmts: analyzedStmts.inner),
             context.diagnostics
         )
     }
 
-    private func checkStmts(_ stmts: [WithSpan<Stmt>], _ context: inout FnContext) throws -> Analyzed<[CheckedAST.Stmt]> {
+    private func checkStmts(
+        _ stmts: [WithSpan<Stmt>],
+        _ context: inout FnContext
+    ) throws -> Analyzed<[CheckedAST.Stmt]> {
         context.pushScope()
         let analyzedStmts = try stmts.map { stmt in
             try checkStmt(stmt, &context)
@@ -146,7 +152,10 @@ public struct TypeChecker {
 
         let lastReachableIndex = analyzedStmts.firstIndex(where: \.returnsOnAllPaths)
         if let lastReachableIndex, lastReachableIndex < stmts.count - 1 {
-            context.diagnose(Diagnostic(warning: "warning: Unreachable statements", at: stmts[lastReachableIndex + 1].span))
+            context.diagnose(
+                Diagnostic(
+                    warning: "warning: Unreachable statements",
+                    at: stmts[lastReachableIndex + 1].span))
         }
         return Analyzed(
             analyzedStmts[...(lastReachableIndex ?? analyzedStmts.count - 1)].map(\.inner),
@@ -154,25 +163,31 @@ public struct TypeChecker {
         )
     }
 
-    private func checkStmt(_ stmt: WithSpan<Stmt>, _ context: inout FnContext) throws -> Analyzed<CheckedAST.Stmt> {
+    private func checkStmt(
+        _ stmt: WithSpan<Stmt>,
+        _ context: inout FnContext
+    ) throws -> Analyzed<CheckedAST.Stmt> {
         switch *stmt {
             case let .if(ifStmt):
                 return (try checkIfStmt(ifStmt, &context)).map(CheckedAST.Stmt.if)
             case let .return(expr):
-                let checkedExpr: Typed<CheckedAST.Expr>? = if let expr {
-                    try checkExpr(expr, &context)
-                } else {
-                    nil
-                }
+                let checkedExpr: Typed<CheckedAST.Expr>? =
+                    if let expr {
+                        try checkExpr(expr, &context)
+                    } else {
+                        nil
+                    }
                 guard (checkedExpr?.type ?? .void) == context.expectedReturnType else {
                     if let expr, let checkedExpr {
                         throw Diagnostic(
-                            error: "Function expected to return '\(context.expectedReturnType)', got expression of type '\(checkedExpr.type)'",
+                            error:
+                                "Function expected to return '\(context.expectedReturnType)', got expression of type '\(checkedExpr.type)'",
                             at: expr.span
                         )
                     } else {
                         throw Diagnostic(
-                            error: "Function expected to return '\(context.expectedReturnType)', got 'Void'",
+                            error:
+                                "Function expected to return '\(context.expectedReturnType)', got 'Void'",
                             at: stmt.span
                         )
                     }
@@ -182,7 +197,8 @@ public struct TypeChecker {
                 let checkedExpr = try checkExpr(varDecl.value, &context)
                 if let type = varDecl.type, checkedExpr.type != *type {
                     throw Diagnostic(
-                        error: "Let binding '\(varDecl.ident)' expected expression of type '\(type)', got expression of type '\(checkedExpr.type)'",
+                        error:
+                            "Let binding '\(varDecl.ident)' expected expression of type '\(type)', got expression of type '\(checkedExpr.type)'",
                         at: varDecl.value.span
                     )
                 }
@@ -194,17 +210,27 @@ public struct TypeChecker {
                     )
                 }
                 let index = context.newLocal(*varDecl.ident, type: checkedExpr.type)
-                return Analyzed(.let(CheckedAST.VarDecl(localIndex: index, value: checkedExpr)), returnsOnAllPaths: false)
+                return Analyzed(
+                    .let(CheckedAST.VarDecl(localIndex: index, value: checkedExpr)),
+                    returnsOnAllPaths: false
+                )
             case let .expr(expr):
-                return Analyzed(.expr(try checkExpr(WithSpan(expr, stmt.span), &context)), returnsOnAllPaths: false)
+                return Analyzed(
+                    .expr(try checkExpr(WithSpan(expr, stmt.span), &context)),
+                    returnsOnAllPaths: false
+                )
         }
     }
 
-    private func checkIfStmt(_ ifStmt: IfStmt, _ context: inout FnContext) throws -> Analyzed<CheckedAST.IfStmt> {
+    private func checkIfStmt(
+        _ ifStmt: IfStmt,
+        _ context: inout FnContext
+    ) throws -> Analyzed<CheckedAST.IfStmt> {
         let condition = try checkExpr(ifStmt.condition, &context)
         guard condition.type == Int.type else {
             throw Diagnostic(
-                error: "If statement condition must be of type '\(Int.type)', got \(condition.type)",
+                error:
+                    "If statement condition must be of type '\(Int.type)', got \(condition.type)",
                 at: ifStmt.condition.span
             )
         }
@@ -227,15 +253,18 @@ public struct TypeChecker {
                     let condition = try checkExpr(ifBlock.condition, &context)
                     guard condition.type == Int.type else {
                         throw Diagnostic(
-                            error: "If statement condition must be of type '\(Int.type)', got \(condition.type)",
+                            error:
+                                "If statement condition must be of type '\(Int.type)', got \(condition.type)",
                             at: ifBlock.condition.span
                         )
                     }
                     let checkedBlock = try checkStmts(ifBlock.ifBlock, &context)
-                    elseIfBlocks.append(CheckedAST.IfBlock(
-                        condition: condition.inner,
-                        block: checkedBlock.inner
-                    ))
+                    elseIfBlocks.append(
+                        CheckedAST.IfBlock(
+                            condition: condition.inner,
+                            block: checkedBlock.inner
+                        )
+                    )
                     elseBlock = ifBlock.else
                     returnsOnAllPaths = returnsOnAllPaths && checkedBlock.returnsOnAllPaths
                 case let .else(stmts):
@@ -260,7 +289,9 @@ public struct TypeChecker {
         )
     }
 
-    private func checkExpr(_ expr: WithSpan<Expr>, _ context: inout FnContext) throws -> Typed<CheckedAST.Expr> {
+    private func checkExpr(
+        _ expr: WithSpan<Expr>, _ context: inout FnContext
+    ) throws -> Typed<CheckedAST.Expr> {
         switch *expr {
             case let .stringLiteral(content):
                 return Typed(.constant(content), String.type)
@@ -270,7 +301,11 @@ public struct TypeChecker {
                 let arguments = try fnCallExpr.arguments.map { expr in
                     try checkExpr(expr, &context)
                 }
-                let (id, signature) = try resolveFn(fnCallExpr.ident, arguments.map(\.type), span: expr.span)
+                let (id, signature) = try resolveFn(
+                    fnCallExpr.ident,
+                    arguments.map(\.type),
+                    span: expr.span
+                )
                 return Typed(
                     .fnCall(CheckedAST.FnCallExpr(id: id, arguments: arguments)),
                     signature.returnType?.inner ?? .void
@@ -282,7 +317,11 @@ public struct TypeChecker {
                 return Typed(.localVar(index), local.type)
             case let .unaryOp(unaryOpExpr):
                 let operand = try checkExpr(unaryOpExpr.operand, &context)
-                let (id, signature) = try resolveFn(unaryOpExpr.op.map(\.token), [operand.type], span: expr.span)
+                let (id, signature) = try resolveFn(
+                    unaryOpExpr.op.map(\.token),
+                    [operand.type],
+                    span: expr.span
+                )
                 return Typed(
                     .fnCall(CheckedAST.FnCallExpr(id: id, arguments: [operand])),
                     signature.returnType?.inner ?? .void
@@ -304,7 +343,11 @@ public struct TypeChecker {
         }
     }
 
-    private func resolveFn(_ ident: WithSpan<String>, _ argumentTypes: [Type], span: Span) throws -> (CheckedAST.FnId, FnSignature) {
+    private func resolveFn(
+        _ ident: WithSpan<String>,
+        _ argumentTypes: [Type],
+        span: Span
+    ) throws -> (CheckedAST.FnId, FnSignature) {
         guard
             let (id, signature) = fnTable.first(where: { (_, signature) in
                 *signature.ident == *ident && signature.paramTypes.map(\.inner) == argumentTypes
@@ -312,14 +355,15 @@ public struct TypeChecker {
         else {
             let parameters = argumentTypes.map(\.description).joined(separator: ", ")
             let alternativesCount = fnTable.filter { *$0.1.ident == *ident }.count
-            let additionalContext = if alternativesCount > 0 {
-                ". Found \(alternativesCount) function\(alternativesCount > 1 ? "s" : "") with the same name but incompatible parameter types"
-            } else {
-                ""
-            }
+            let additionalContext =
+                if alternativesCount > 0 {
+                    ". Found \(alternativesCount) function\(alternativesCount > 1 ? "s" : "") with the same name but incompatible parameter types"
+                } else {
+                    ""
+                }
             throw Diagnostic(
                 error: "No such function '\(*ident)' with parameters '(\(parameters))'"
-                + additionalContext,
+                    + additionalContext,
                 at: span
             )
         }
@@ -338,10 +382,12 @@ public struct TypeChecker {
                 other.1.ident == fn.signature.ident && other.1.paramTypes == fn.signature.paramTypes
             }
             if isDuplicate {
-                let paramTypes = fn.signature.paramTypes.map(\.inner.description).joined(separator: ", ")
+                let paramTypes = fn.signature.paramTypes.map(\.inner.description)
+                    .joined(separator: ", ")
                 let returnType = fn.signature.returnType?.inner ?? .void
                 throw Diagnostic(
-                    error: "Duplicate definition of builtin '\(fn.signature.ident)' with parameter types '(\(paramTypes)) -> \(returnType)'",
+                    error:
+                        "Duplicate definition of builtin '\(fn.signature.ident)' with parameter types '(\(paramTypes)) -> \(returnType)'",
                     at: fn.signature.ident.span
                 )
             }
@@ -355,9 +401,14 @@ public struct TypeChecker {
                 other.1.ident == fn.ident && other.1.paramTypes == fn.signature.paramTypes
             }
             if isDuplicate {
-                let paramTypes = fn.signature.paramTypes.map(\.inner.description).joined(separator: ", ")
+                let paramTypes = fn.signature.paramTypes.map(\.inner.description)
+                    .joined(separator: ", ")
                 let returnType = fn.signature.returnType?.inner ?? .void
-                throw Diagnostic(error: "Duplicate definition of '\(fn.ident)' with type '(\(paramTypes)) -> \(returnType)'", at: span)
+                throw Diagnostic(
+                    error:
+                        "Duplicate definition of '\(fn.ident)' with type '(\(paramTypes)) -> \(returnType)'",
+                    at: span
+                )
             }
             table.append((.userDefined(index: i), fn.signature))
         }

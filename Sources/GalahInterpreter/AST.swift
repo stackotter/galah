@@ -11,7 +11,11 @@ public struct FnSignature: Hashable {
     public var paramTypes: [WithSpan<Type>]
     public var returnType: WithSpan<Type>?
 
-    public init(ident: WithSpan<String>, paramTypes: [WithSpan<Type>], returnType: WithSpan<Type>? = nil) {
+    public init(
+        ident: WithSpan<String>,
+        paramTypes: [WithSpan<Type>],
+        returnType: WithSpan<Type>? = nil
+    ) {
         self.ident = ident
         self.paramTypes = paramTypes
         self.returnType = returnType
@@ -112,7 +116,8 @@ extension Expr: CustomStringConvertible {
             case .integerLiteral(let value):
                 return "\(value)"
             case .fnCall(let fnCall):
-                return "\(fnCall.ident)(\(fnCall.arguments.map(\.inner.description).joined(separator: ", ")))"
+                return
+                    "\(fnCall.ident)(\(fnCall.arguments.map(\.inner.description).joined(separator: ", ")))"
             case .ident(let ident):
                 return ident
             case .unaryOp(let unaryOp):

@@ -22,12 +22,14 @@ public struct WithSpanMacro: PeerMacro {
                     .withAttributes(function.attributes.removing(node))
                     .withIdentifier("\(function.identifier)WithSpan")
                     .withReturnType(Type(returnTypeWithSpan))
-                    .withBody(CodeBlockSyntax {
-                        "let startLocation = peekLocation()"
-                        "let result = try \(raw: function.identifier)()"
-                        "let endLocation = peekLocation()"
-                        "return WithSpan(result, startLocation.span(until: endLocation))"
-                    })
+                    .withBody(
+                        CodeBlockSyntax {
+                            "let startLocation = peekLocation()"
+                            "let result = try \(raw: function.identifier)()"
+                            "let endLocation = peekLocation()"
+                            "return WithSpan(result, startLocation.span(until: endLocation))"
+                        }
+                    )
             )
         ]
     }

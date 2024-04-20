@@ -15,7 +15,7 @@ public struct Location: Equatable, Hashable {
         return location
     }
 
-    public static func +(_ lhs: Self, _ rhs: Token.Size) -> Self {
+    public static func + (_ lhs: Self, _ rhs: Token.Size) -> Self {
         var result = lhs
         result.line += rhs.lines - 1
         if rhs.lines == 1 {

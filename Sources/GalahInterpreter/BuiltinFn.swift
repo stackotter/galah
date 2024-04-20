@@ -27,7 +27,10 @@ public struct BuiltinFn {
         signature = FnSignature(builtin: ident, paramTypes: [], returnType: R.type)
     }
 
-    public init<A: GalahRepresentable, R: GalahRepresentable>(_ ident: String, _ fn: @escaping (A) -> R) {
+    public init<A: GalahRepresentable, R: GalahRepresentable>(
+        _ ident: String,
+        _ fn: @escaping (A) -> R
+    ) {
         storage = .fn1 { a in
             return fn(Self.cast(a, for: ident))
         }
@@ -39,7 +42,8 @@ public struct BuiltinFn {
     }
 
     public init<A: GalahRepresentable, B: GalahRepresentable, R: GalahRepresentable>(
-        _ ident: String, _ fn: @escaping (A, B) -> R
+        _ ident: String,
+        _ fn: @escaping (A, B) -> R
     ) {
         storage = .fn2 { a, b in
             return fn(
@@ -54,7 +58,10 @@ public struct BuiltinFn {
         )
     }
 
-    public init<Operand: GalahRepresentable, R: GalahRepresentable>(unaryOp ident: String, _ fn: @escaping (Operand) -> R) {
+    public init<Operand: GalahRepresentable, R: GalahRepresentable>(
+        unaryOp ident: String,
+        _ fn: @escaping (Operand) -> R
+    ) {
         storage = .unaryOp { operand in
             return fn(
                 Self.cast(operand, for: ident)
@@ -67,7 +74,10 @@ public struct BuiltinFn {
         )
     }
 
-    public init<Left: GalahRepresentable, Right: GalahRepresentable, R: GalahRepresentable>(binaryOp ident: String, _ fn: @escaping (Left, Right) -> R) {
+    public init<Left: GalahRepresentable, Right: GalahRepresentable, R: GalahRepresentable>(
+        binaryOp ident: String,
+        _ fn: @escaping (Left, Right) -> R
+    ) {
         storage = .binaryOp { left, right in
             return fn(
                 Self.cast(left, for: ident),
@@ -110,7 +120,10 @@ public struct BuiltinFn {
         )
     }
 
-    public init<A: GalahRepresentable, B: GalahRepresentable>(_ ident: String, _ fn: @escaping (A, B) -> Void) {
+    public init<A: GalahRepresentable, B: GalahRepresentable>(
+        _ ident: String,
+        _ fn: @escaping (A, B) -> Void
+    ) {
         storage = .fn2 { a, b in
             return fn(
                 Self.cast(a, for: ident),
@@ -124,7 +137,10 @@ public struct BuiltinFn {
         )
     }
 
-    public init<Operand: GalahRepresentable>(unaryOp ident: String, _ fn: @escaping (Operand) -> Void) {
+    public init<Operand: GalahRepresentable>(
+        unaryOp ident: String,
+        _ fn: @escaping (Operand) -> Void
+    ) {
         storage = .unaryOp { operand in
             return fn(
                 Self.cast(operand, for: ident)
@@ -137,7 +153,10 @@ public struct BuiltinFn {
         )
     }
 
-    public init<Left: GalahRepresentable, Right: GalahRepresentable>(binaryOp ident: String, _ fn: @escaping (Left, Right) -> Void) {
+    public init<Left: GalahRepresentable, Right: GalahRepresentable>(
+        binaryOp ident: String,
+        _ fn: @escaping (Left, Right) -> Void
+    ) {
         storage = .binaryOp { left, right in
             return fn(
                 Self.cast(left, for: ident),
@@ -154,7 +173,11 @@ public struct BuiltinFn {
     public func call(with arguments: [Any]) throws -> Any {
         if let arity {
             guard arity == arguments.count else {
-                throw Diagnostic(error: "'\(signature.ident)' expects \(arity) arguments, got \(arguments.count)", at: .builtin)
+                throw Diagnostic(
+                    error:
+                        "'\(signature.ident)' expects \(arity) arguments, got \(arguments.count)",
+                    at: .builtin
+                )
             }
         }
 

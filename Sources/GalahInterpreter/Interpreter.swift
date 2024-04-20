@@ -146,7 +146,10 @@ public struct Interpreter {
         }
     }
 
-    public static func dictionary<T, K: Hashable>(of values: [T], keyedBy keyPath: KeyPath<T, K>) -> [K: T] {
+    public static func dictionary<T, K: Hashable>(
+        of values: [T],
+        keyedBy keyPath: KeyPath<T, K>
+    ) -> [K: T] {
         var dictionary: [K: T] = [:]
         for value in values {
             dictionary[value[keyPath: keyPath]] = value

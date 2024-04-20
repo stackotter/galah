@@ -1,6 +1,6 @@
-import GalahInterpreter
 import ArgumentParser
 import Foundation
+import GalahInterpreter
 
 var standardError = FileHandle.standardError
 

@@ -10,7 +10,7 @@ let package = Package(
         .library(
             name: "GalahInterpreter",
             targets: ["GalahInterpreter"]
-        ),
+        )
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
@@ -28,7 +28,7 @@ let package = Package(
             name: "galah",
             dependencies: [
                 "GalahInterpreter",
-                .product(name: "ArgumentParser", package: "swift-argument-parser")
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
         .target(

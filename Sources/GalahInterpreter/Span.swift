@@ -46,6 +46,6 @@ public struct WithSpan<Inner> {
 extension WithSpan: Equatable where Inner: Equatable {}
 extension WithSpan: Hashable where Inner: Hashable {}
 
-prefix func *<Inner>(_ span: WithSpan<Inner>) -> Inner {
+prefix func * <Inner>(_ span: WithSpan<Inner>) -> Inner {
     span.inner
 }
