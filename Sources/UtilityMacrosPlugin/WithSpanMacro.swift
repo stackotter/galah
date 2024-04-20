@@ -25,7 +25,7 @@ public struct WithSpanMacro: PeerMacro {
                     .withBody(CodeBlockSyntax {
                         "let startLocation = peekLocation()"
                         "let result = try \(raw: function.identifier)()"
-                        "let endLocation = location()"
+                        "let endLocation = peekLocation()"
                         "return WithSpan(result, startLocation.span(until: endLocation))"
                     })
             )

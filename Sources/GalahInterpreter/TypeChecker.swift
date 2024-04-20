@@ -156,21 +156,33 @@ public struct TypeChecker {
                     nil
                 }
                 guard (checkedExpr?.type ?? .void) == context.expectedReturnType else {
-                    if let checkedExpr {
-                        throw RichError("Function expected to return '\(context.expectedReturnType)', got expression of type '\(checkedExpr.type)'")
+                    if let expr, let checkedExpr {
+                        throw RichError(
+                            "Function expected to return '\(context.expectedReturnType)', got expression of type '\(checkedExpr.type)'",
+                            at: expr.span
+                        )
                     } else {
-                        throw RichError("Returned expected to return '\(context.expectedReturnType)', got 'Void'", at: stmt.span)
+                        throw RichError(
+                            "Function expected to return '\(context.expectedReturnType)', got 'Void'",
+                            at: stmt.span
+                        )
                     }
                 }
                 return Analyzed(.return(checkedExpr), returnsOnAllPaths: true)
             case let .let(varDecl):
                 let checkedExpr = try checkExpr(varDecl.value, &context)
                 if let type = varDecl.type, checkedExpr.type != *type {
-                    throw RichError("Let binding '\(varDecl.ident)' expected expression of type '\(type)', got expression of type '\(checkedExpr.type)'")
+                    throw RichError(
+                        "Let binding '\(varDecl.ident)' expected expression of type '\(type)', got expression of type '\(checkedExpr.type)'",
+                        at: varDecl.value.span
+                    )
                 }
                 // TODO: Do we allow shadowing within the same scope level? (it should be as easy as just removing this check)
                 if context.localInInnermostScope(for: *varDecl.ident) != nil {
-                    throw RichError("Duplicate definition of '\(varDecl.ident)' within current scope", at: varDecl.ident.span)
+                    throw RichError(
+                        "Duplicate definition of '\(varDecl.ident)' within current scope",
+                        at: varDecl.ident.span
+                    )
                 }
                 let index = context.newLocal(*varDecl.ident, type: checkedExpr.type)
                 return Analyzed(.let(CheckedAST.VarDecl(localIndex: index, value: checkedExpr)), returnsOnAllPaths: false)
@@ -182,7 +194,10 @@ public struct TypeChecker {
     private func checkIfStmt(_ ifStmt: IfStmt, _ context: inout FnContext) throws -> Analyzed<CheckedAST.IfStmt> {
         let condition = try checkExpr(ifStmt.condition, &context)
         guard condition.type == Int.type else {
-            throw RichError("If statement condition must be of type '\(Int.type)', got \(condition.type)", at: ifStmt.condition.span)
+            throw RichError(
+                "If statement condition must be of type '\(Int.type)', got \(condition.type)",
+                at: ifStmt.condition.span
+            )
         }
 
         let checkedIfBlock = try checkStmts(ifStmt.ifBlock, &context)
@@ -202,7 +217,10 @@ public struct TypeChecker {
                 case let .elseIf(ifBlock):
                     let condition = try checkExpr(ifBlock.condition, &context)
                     guard condition.type == Int.type else {
-                        throw RichError("If statement condition must be of type '\(Int.type)', got \(condition.type)", at: ifBlock.condition.span)
+                        throw RichError(
+                            "If statement condition must be of type '\(Int.type)', got \(condition.type)",
+                            at: ifBlock.condition.span
+                        )
                     }
                     let checkedBlock = try checkStmts(ifBlock.ifBlock, &context)
                     elseIfBlocks.append(CheckedAST.IfBlock(
@@ -243,7 +261,7 @@ public struct TypeChecker {
                 let arguments = try fnCallExpr.arguments.map { expr in
                     try checkExpr(expr, &context)
                 }
-                let (id, signature) = try resolveFn(fnCallExpr.ident, arguments.map(\.type))
+                let (id, signature) = try resolveFn(fnCallExpr.ident, arguments.map(\.type), span: expr.span)
                 return Typed(
                     .fnCall(CheckedAST.FnCallExpr(id: id, arguments: arguments)),
                     signature.returnType?.inner ?? .void
@@ -255,7 +273,7 @@ public struct TypeChecker {
                 return Typed(.localVar(index), local.type)
             case let .unaryOp(unaryOpExpr):
                 let operand = try checkExpr(unaryOpExpr.operand, &context)
-                let (id, signature) = try resolveFn(unaryOpExpr.op.map(\.token), [operand.type])
+                let (id, signature) = try resolveFn(unaryOpExpr.op.map(\.token), [operand.type], span: expr.span)
                 return Typed(
                     .fnCall(CheckedAST.FnCallExpr(id: id, arguments: [operand])),
                     signature.returnType?.inner ?? .void
@@ -263,7 +281,11 @@ public struct TypeChecker {
             case let .binaryOp(binaryOpExpr):
                 let leftOperand = try checkExpr(binaryOpExpr.leftOperand, &context)
                 let rightOperand = try checkExpr(binaryOpExpr.rightOperand, &context)
-                let (id, signature) = try resolveFn(binaryOpExpr.op.map(\.token), [leftOperand.type, rightOperand.type])
+                let (id, signature) = try resolveFn(
+                    binaryOpExpr.op.map(\.token),
+                    [leftOperand.type, rightOperand.type],
+                    span: expr.span
+                )
                 return Typed(
                     .fnCall(CheckedAST.FnCallExpr(id: id, arguments: [leftOperand, rightOperand])),
                     signature.returnType?.inner ?? .void
@@ -273,7 +295,7 @@ public struct TypeChecker {
         }
     }
 
-    private func resolveFn(_ ident: WithSpan<String>, _ argumentTypes: [Type]) throws -> (CheckedAST.FnId, FnSignature) {
+    private func resolveFn(_ ident: WithSpan<String>, _ argumentTypes: [Type], span: Span) throws -> (CheckedAST.FnId, FnSignature) {
         guard
             let (id, signature) = fnTable.first(where: { (_, signature) in
                 *signature.ident == *ident && signature.paramTypes.map(\.inner) == argumentTypes
@@ -281,9 +303,15 @@ public struct TypeChecker {
         else {
             let parameters = argumentTypes.map(\.description).joined(separator: ", ")
             let alternativesCount = fnTable.filter { $0.1.ident == ident }.count
+            let additionalContext = if alternativesCount > 0 {
+                " Found \(alternativesCount) functions with the same name but incompatible parameter types"
+            } else {
+                ""
+            }
             throw RichError(
-                "No such function '\(ident)' with parameters '(\(parameters))'. "
-                + "Found \(alternativesCount) functions with the same name but incompatible parameter types"
+                "No such function '\(*ident)' with parameters '(\(parameters))'. "
+                + additionalContext,
+                at: span
             )
         }
 
@@ -304,7 +332,10 @@ public struct TypeChecker {
                 let paramTypes = fn.signature.paramTypes.map(\.inner.description).joined(separator: ", ")
                 let returnType = fn.signature.returnType?.inner ?? .void
                 // TODO: Enrich error message with more information about the two clashing signatures
-                throw RichError("Duplicate definition of builtin '\(fn.signature.ident)' with parameter types '(\(paramTypes)) -> \(returnType)'")
+                throw RichError(
+                    "Duplicate definition of builtin '\(fn.signature.ident)' with parameter types '(\(paramTypes)) -> \(returnType)'",
+                    at: fn.signature.ident.span
+                )
             }
             table.append((.builtin(index: i), fn.signature))
         }

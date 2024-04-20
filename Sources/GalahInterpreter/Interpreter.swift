@@ -14,7 +14,7 @@ public struct Interpreter {
         let interpreter = Interpreter(checkedAST)
 
         guard let main = interpreter.ast.fn(named: "main", withParamTypes: []) else {
-            throw RichError("Missing 'main' function")
+            throw RichError("Missing 'main' function", at: nil)
         }
 
         _ = try interpreter.evaluate(main, arguments: [])

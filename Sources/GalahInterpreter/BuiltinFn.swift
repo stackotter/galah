@@ -154,7 +154,7 @@ public struct BuiltinFn {
     public func call(with arguments: [Any]) throws -> Any {
         if let arity {
             guard arity == arguments.count else {
-                throw RichError("'\(signature.ident)' expects \(arity) arguments, got \(arguments.count)")
+                throw RichError("'\(signature.ident)' expects \(arity) arguments, got \(arguments.count)", at: .builtin)
             }
         }
 

@@ -234,24 +234,28 @@ public struct Parser {
                 throw RichError("Expected an expression, got \(token.token.noun)", at: location())
         }
         let endLocation = location()
-        let exprWithSpan = WithSpan(expr, startLocation.span(until: endLocation))
 
+        let previousIndexBeforeTrivia = previousIndex
         let indexBeforeTrivia = index
         let hasWhitespaceBeforeOp = skipTrivia().foundWhitespace
         if let token = richPeek(), case let .op(op) = token.token {
             next()
+
             let operatorLocation = location()
             let hasWhitespaceAfterOp = skipTrivia().foundWhitespace
             guard hasWhitespaceBeforeOp == hasWhitespaceAfterOp else {
                 throw RichError("A binary operator must either have whitespace on both sides or none at all", at: operatorLocation)
             }
+
             let rightOperand = try parseExprWithSpan()
+            let exprWithSpan = WithSpan(expr, startLocation.span(until: endLocation))
             return .binaryOp(BinaryOpExpr(
                 op: WithSpan(op, token.span),
                 leftOperand: exprWithSpan,
                 rightOperand: rightOperand
             ))
         } else {
+            previousIndex = previousIndexBeforeTrivia
             index = indexBeforeTrivia
             return expr
         }
@@ -306,7 +310,11 @@ public struct Parser {
     /// The location of the token that would be returned by ``Parser/peek``. If at the
     /// end of the file, the location after the file's last token is given.
     private func peekLocation() -> Location {
-        location() + tokens[previousIndex].token.size
+        if index < tokens.count {
+            tokens[index].location
+        } else {
+            location() + tokens[previousIndex].token.size
+        }
     }
 
     @discardableResult

@@ -18,7 +18,7 @@ public struct RichError: Error, CustomStringConvertible {
         }
     }
 
-    public init(_ message: String, at location: Location? = nil) {
+    public init(_ message: String, at location: Location?) {
         self.message = message
         self.source = location.map(Source.location)
     }

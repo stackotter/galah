@@ -6,8 +6,8 @@ public enum Span: Equatable, Hashable {
 
     public var shortDescription: String {
         switch self {
-            case let .source(start, _):
-                return "\(start.line):\(start.column)"
+            case let .source(start, end):
+                return "\(start.line):\(start.column)~\(end.line):\(end.column)"
             case .builtin:
                 return "<builtin>"
         }
