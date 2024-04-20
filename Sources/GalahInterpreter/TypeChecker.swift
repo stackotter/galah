@@ -302,14 +302,14 @@ public struct TypeChecker {
             })
         else {
             let parameters = argumentTypes.map(\.description).joined(separator: ", ")
-            let alternativesCount = fnTable.filter { $0.1.ident == ident }.count
+            let alternativesCount = fnTable.filter { *$0.1.ident == *ident }.count
             let additionalContext = if alternativesCount > 0 {
-                " Found \(alternativesCount) functions with the same name but incompatible parameter types"
+                ". Found \(alternativesCount) function\(alternativesCount > 1 ? "s" : "") with the same name but incompatible parameter types"
             } else {
                 ""
             }
             throw RichError(
-                "No such function '\(*ident)' with parameters '(\(parameters))'. "
+                "No such function '\(*ident)' with parameters '(\(parameters))'"
                 + additionalContext,
                 at: span
             )
