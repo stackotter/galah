@@ -22,6 +22,8 @@ let package = Package(
             url: "https://github.com/stackotter/swift-macro-toolkit",
             from: "0.3.1"
         ),
+        .package(url: "https://github.com/swiftwasm/carton", from: "1.0.0"),
+        .package(url: "https://github.com/swiftwasm/JavaScriptKit", exact: "0.15.0"),
     ],
     targets: [
         .executableTarget(
@@ -29,6 +31,21 @@ let package = Package(
             dependencies: [
                 "GalahInterpreter",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
+        .executableTarget(
+            name: "GalahWeb",
+            dependencies: [
+                "GalahInterpreter",
+                "JavaScriptKit",
+            ],
+            linkerSettings: [
+                .unsafeFlags(
+                    [
+                        "-Xlinker", "--export=main",
+                        "-Xclang-linker", "-mexec-model=reactor",
+                    ]
+                )
             ]
         ),
         .target(
