@@ -4,16 +4,22 @@ A scripting language with the goal of being lightweight and embeddable in Swift 
 
 ### Trying it out
 
+#### Online playground
+
+The [Galah playground](https://stackotter.github.io/galah) uses WASM to run a Galah interpreter
+in your browser! Visit it in a modern browser to try out Galah without the need to install it
+locally.
+
+#### Building locally
+
 The following commands build the interpreter's CLI from source and run the `sample.galah` file
-included in this repository.
+included in this repository,
 
 ```sh
 git clone https://github.com/stackotter/galah
 cd galah
 swift run galah ./sample.galah
 ```
-
-Online playground coming soon! (blocked by [macro-related WASM build issues](https://forums.swift.org/t/issue-using-swift-macros-in-swiftpm-package-when-targeting-wasm/71363))
 
 ### Syntax (WIP, mostly not implemented yet)
 
