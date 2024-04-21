@@ -19,8 +19,6 @@ func create(
     return element
 }
 
-create("h1") { $0.textContent = "Galah playground" }
-
 create("style") { stylesheet in
     stylesheet.innerHTML =
         """
@@ -33,6 +31,10 @@ create("style") { stylesheet in
             margin: auto;
             width: 100%;
             max-width: 80rem;
+        }
+
+        h1 {
+            margin-top: 1rem;
         }
 
         #split {
@@ -71,6 +73,16 @@ create("style") { stylesheet in
             border: none;
             font-weight: bold;
         }
+        """
+}
+
+create("h1") { $0.textContent = "Galah playgrnd" }
+
+create("p") {
+    $0.innerHTML =
+        """
+        Galah is a scripting language with the goal of being lightweight and embeddable in Swift applications.
+        Visit <a href="https://github.com/stackotter/galah">the Galah GitHub repository</a> to find out more.
         """
 }
 
