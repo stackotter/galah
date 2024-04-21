@@ -88,7 +88,7 @@ public struct Diagnostic: Error, CustomStringConvertible {
         let startLine = startLocation.line - 1
         let endLine = endLocation.line - 1
 
-        let lines = sourceCode.split(separator: "\n")
+        let lines = sourceCode.split(separator: "\n", omittingEmptySubsequences: false)
         let errorLines = Array(lines[startLine...endLine])
         let indent = "    "
         if errorLines.count > 1 {
