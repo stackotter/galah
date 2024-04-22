@@ -1,9 +1,21 @@
 public struct AST {
+    public var structDecls: [WithSpan<StructDecl>]
     public var fnDecls: [WithSpan<FnDecl>]
 
-    public init(fnDecls: [WithSpan<FnDecl>]) {
+    public init(structDecls: [WithSpan<StructDecl>], fnDecls: [WithSpan<FnDecl>]) {
+        self.structDecls = structDecls
         self.fnDecls = fnDecls
     }
+}
+
+public struct StructDecl {
+    public var ident: WithSpan<String>
+    public var fields: [WithSpan<Field>]
+}
+
+public struct Field {
+    public var ident: WithSpan<String>
+    public var type: WithSpan<Type>
 }
 
 public struct FnSignature: Hashable {

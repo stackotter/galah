@@ -1,5 +1,7 @@
 public struct CheckedAST {
-    public var builtins: [BuiltinFn]
+    public var builtinTypes: [BuiltinType]
+    public var structs: [Struct]
+    public var builtinFns: [BuiltinFn]
     public var fns: [Fn]
 
     public struct Typed<Inner> {
@@ -10,6 +12,10 @@ public struct CheckedAST {
             self.inner = inner
             self.type = type
         }
+    }
+
+    public struct Struct {
+        public var fieldCount: Int
     }
 
     public struct Fn {

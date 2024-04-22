@@ -1,17 +1,18 @@
 public struct Interpreter {
     /// - Parameters:
-    ///   - builtins: The builtin functions that will be available to the script.
-    ///     Defaults to ``Interpreter/defaultBuiltins``.
+    ///   - builtinFns: The builtin functions that will be available to the script.
+    ///     Defaults to ``Interpreter/defaultBuiltinFns``.
     public static func run(
         _ code: String,
-        builtins: [BuiltinFn] = Self.defaultBuiltins,
+        builtinTypes: [BuiltinType] = Self.defaultBuiltinTypes,
+        builtinFns: [BuiltinFn] = Self.defaultBuiltinFns,
         diagnosticHandler handleDiagnostic: (Diagnostic) -> Void = { _ in }
     ) throws {
         let tokens = try Lexer.lex(code)
 
         let ast = try Parser.parse(tokens)
 
-        let typeCheckerResult = try TypeChecker.check(ast, builtins)
+        let typeCheckerResult = try TypeChecker.check(ast, builtinTypes, builtinFns)
         let checkedAST = typeCheckerResult.inner
         typeCheckerResult.diagnostics.forEach(handleDiagnostic)
 
@@ -24,7 +25,14 @@ public struct Interpreter {
         _ = try interpreter.evaluate(main, arguments: [])
     }
 
-    public static let defaultBuiltins: [BuiltinFn] = [
+    public static let defaultBuiltinTypes: [BuiltinType] = [
+        BuiltinType(ident: "Void"),
+        BuiltinType(ident: "Int"),
+        BuiltinType(ident: "Bool"),
+        BuiltinType(ident: "String"),
+    ]
+
+    public static let defaultBuiltinFns: [BuiltinFn] = [
         BuiltinFn(binaryOp: "+") { (a: Int, b: Int) in
             a + b
         },
@@ -137,7 +145,7 @@ public struct Interpreter {
                 }
                 switch fnCallExpr.id {
                     case let .builtin(index):
-                        return try ast.builtins[index].call(with: arguments)
+                        return try ast.builtinFns[index].call(with: arguments)
                     case let .userDefined(index):
                         return try evaluate(ast.fns[index], arguments: arguments)
                 }

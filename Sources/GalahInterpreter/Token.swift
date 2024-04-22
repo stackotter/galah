@@ -4,6 +4,7 @@ public enum Keyword: String {
     case `else`
     case `return`
     case `let`
+    case `struct`
 }
 
 public enum Whitespace: Character {

@@ -1,8 +1,10 @@
 public struct TypeChecker {
-    public static func check(_ ast: AST, _ builtins: [BuiltinFn]) throws -> WithDiagnostics<
-        CheckedAST
-    > {
-        try TypeChecker(ast, builtins).check()
+    public static func check(
+        _ ast: AST,
+        _ builtinTypes: [BuiltinType],
+        _ builtinFns: [BuiltinFn]
+    ) throws -> WithDiagnostics<CheckedAST> {
+        try TypeChecker(ast, builtinTypes, builtinFns).check()
     }
 
     typealias LocalsTable = [String: (index: Int, type: Type)]
@@ -101,28 +103,122 @@ public struct TypeChecker {
         }
     }
 
-    let builtins: [BuiltinFn]
+    let builtinTypes: [BuiltinType]
+    let builtinFns: [BuiltinFn]
+    let structDecls: [WithSpan<StructDecl>]
     let fnDecls: [WithSpan<FnDecl>]
     let fnTable: [(CheckedAST.FnId, FnSignature)]
 
-    private init(_ ast: AST, _ builtins: [BuiltinFn]) throws {
-        self.builtins = builtins
+    private init(_ ast: AST, _ builtinTypes: [BuiltinType], _ builtinFns: [BuiltinFn]) throws {
+        self.builtinTypes = builtinTypes
+        self.builtinFns = builtinFns
+        structDecls = ast.structDecls
         fnDecls = ast.fnDecls
-        fnTable = try Self.buildFnLookupTable(fnDecls, builtins)
+        fnTable = try Self.buildFnLookupTable(fnDecls, builtinFns)
+    }
+
+    enum TypeNode: Hashable {
+        case builtin(Int)
+        case structDecl(Int)
     }
 
     private func check() throws -> WithDiagnostics<CheckedAST> {
+        let structs = try checkStructs(structDecls)
         let fns: WithDiagnostics<[CheckedAST.Fn]> = try fnDecls.map(checkFn).collect()
         return fns.map { fns in
-            CheckedAST(builtins: builtins, fns: fns)
+            CheckedAST(
+                builtinTypes: builtinTypes,
+                structs: structs,
+                builtinFns: builtinFns,
+                fns: fns
+            )
         }
+    }
+
+    private func checkStructs(_ structDecls: [WithSpan<StructDecl>]) throws -> [CheckedAST.Struct] {
+        var structs: [CheckedAST.Struct] = []
+        var knownStructs: [String] = []
+        for (i, structDecl) in structDecls.enumerated() {
+            guard !builtinTypes.contains(where: { $0.ident == *structDecl.ident }) else {
+                throw Diagnostic(
+                    error: "Duplicate definition of builtin type '\(*structDecl.ident)'",
+                    at: structDecl.ident.span
+                )
+            }
+
+            // TODO: Include span of the original struct once errors can have multiple diagnostics
+            guard !knownStructs.contains(structDecl.ident.inner) else {
+                throw Diagnostic(
+                    error: "Duplicate definition of struct '\(*structDecl.ident)'",
+                    at: structDecl.ident.span
+                )
+            }
+
+            // TODO: Implement a custom Deque type for this, probably not great using an Array cause
+            //   we're using it as a FIFO queue for BFS (when searching for cycles).
+            var referencedTypes: [(type: TypeNode, path: [(structDecl: Int, field: Int)])] = []
+            for (fieldIndex, field) in structDecl.fields.enumerated() {
+                guard
+                    !structDecl.fields[0..<fieldIndex]
+                        .contains(where: { *$0.ident == *field.ident })
+                else {
+                    throw Diagnostic(
+                        error:
+                            "Duplicate definition of field '\(*structDecl.ident).\(*field.ident)'",
+                        at: field.span
+                    )
+                }
+                referencedTypes.append((try checkType(field.type), [(i, fieldIndex)]))
+            }
+
+            var visitedTypes: Set<TypeNode> = []
+            while !referencedTypes.isEmpty {
+                let (type, path) = referencedTypes.removeFirst()
+                switch type {
+                    case .builtin:
+                        continue
+                    case let .structDecl(index):
+                        guard index != i else {
+                            let ident = *structDecl.ident
+                            let fieldChain = path.map { (structIndex, fieldIndex) in
+                                *structDecls[structIndex].fields[fieldIndex].ident
+                            }.joined(separator: ".")
+                            throw Diagnostic(
+                                error:
+                                    "Struct '\(ident)' references itself via '\(ident).\(fieldChain)'",
+                                at: structDecl.span
+                            )
+                        }
+                        let referencedDecl = structDecls[index]
+                        for (fieldIndex, field) in referencedDecl.fields.enumerated() {
+                            let fieldType = try checkType(field.type)
+                            guard !visitedTypes.contains(fieldType) else {
+                                continue
+                            }
+                            referencedTypes.append((fieldType, path + [(index, fieldIndex)]))
+                            visitedTypes.insert(fieldType)
+                        }
+                }
+            }
+
+            knownStructs.append(*structDecl.ident)
+            structs.append(CheckedAST.Struct(fieldCount: structDecl.fields.count))
+        }
+
+        return structs
     }
 
     private func checkFn(_ fn: WithSpan<FnDecl>) throws -> WithDiagnostics<CheckedAST.Fn> {
         let span = fn.span
         let fn = *fn
+
+        if let returnType = fn.signature.returnType {
+            try checkType(returnType)
+        }
+
         var context = FnContext(expectedReturnType: fn.signature.returnType?.inner ?? .void)
         for param in fn.params {
+            try checkType(param.inner.type)
             context.newLocal(*param.inner.ident, type: *param.inner.type)
         }
 
@@ -138,6 +234,18 @@ public struct TypeChecker {
                 signature: fn.signature, localCount: context.localCount, stmts: analyzedStmts.inner),
             context.diagnostics
         )
+    }
+
+    @discardableResult
+    private func checkType(_ type: WithSpan<Type>) throws -> TypeNode {
+        let typeName = type.inner.description
+        if let builtinIndex = builtinTypes.firstIndex(where: { $0.ident == typeName }) {
+            return .builtin(builtinIndex)
+        } else if let structIndex = structDecls.firstIndex(where: { *$0.ident == typeName }) {
+            return .structDecl(structIndex)
+        } else {
+            throw Diagnostic(error: "No such type '\(typeName)'", at: type.span)
+        }
     }
 
     private func checkStmts(
@@ -194,14 +302,20 @@ public struct TypeChecker {
                 }
                 return Analyzed(.return(checkedExpr), returnsOnAllPaths: true)
             case let .let(varDecl):
+                if let type = varDecl.type {
+                    try checkType(type)
+                }
+
                 let checkedExpr = try checkExpr(varDecl.value, &context)
+
                 if let type = varDecl.type, checkedExpr.type != *type {
                     throw Diagnostic(
                         error:
-                            "Let binding '\(varDecl.ident)' expected expression of type '\(type)', got expression of type '\(checkedExpr.type)'",
+                            "Let binding '\(*varDecl.ident)' expected expression of type '\(*type)', got expression of type '\(checkedExpr.type)'",
                         at: varDecl.value.span
                     )
                 }
+
                 // TODO: Do we allow shadowing within the same scope level? (it should be as easy as just removing this check)
                 if context.localInInnermostScope(for: *varDecl.ident) != nil {
                     throw Diagnostic(
@@ -209,6 +323,7 @@ public struct TypeChecker {
                         at: varDecl.ident.span
                     )
                 }
+
                 let index = context.newLocal(*varDecl.ident, type: checkedExpr.type)
                 return Analyzed(
                     .let(CheckedAST.VarDecl(localIndex: index, value: checkedExpr)),

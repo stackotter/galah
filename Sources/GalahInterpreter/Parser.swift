@@ -22,11 +22,14 @@ public struct Parser {
     }
 
     private consuming func parse() throws -> AST {
+        var structDecls: [WithSpan<StructDecl>] = []
         var fnDecls: [WithSpan<FnDecl>] = []
 
         skipTrivia()
         while let token = peek() {
             switch token {
+                case .keyword(.struct):
+                    structDecls.append(try parseStructDeclWithSpan())
                 case .keyword(.fn):
                     fnDecls.append(try parseFnDeclWithSpan())
                 default:
@@ -38,7 +41,48 @@ public struct Parser {
             skipTrivia()
         }
 
-        return AST(fnDecls: fnDecls)
+        return AST(structDecls: structDecls, fnDecls: fnDecls)
+    }
+
+    @AlsoWithSpan
+    private mutating func parseStructDecl() throws -> StructDecl {
+        try expect(.keyword(.struct))
+        try expectWhitespaceSkippingTrivia()
+
+        let ident = try expectIdentWithSpan()
+
+        skipTrivia()
+        try expect(.leftBrace)
+        skipTrivia()
+
+        var fields: [WithSpan<Field>] = []
+        while let token = peek(), token != .rightBrace {
+            fields.append(try parseFieldWithSpan())
+            skipTrivia()
+            if peek() == .comma {
+                next()
+                skipTrivia()
+            } else {
+                break
+            }
+        }
+
+        try expect(.rightBrace)
+
+        return StructDecl(
+            ident: ident,
+            fields: fields
+        )
+    }
+
+    @AlsoWithSpan
+    private mutating func parseField() throws -> Field {
+        let ident = try expectIdentWithSpan()
+        skipTrivia()
+        try expect(.colon)
+        skipTrivia()
+        let type = try parseTypeWithSpan()
+        return Field(ident: ident, type: type)
     }
 
     @AlsoWithSpan
