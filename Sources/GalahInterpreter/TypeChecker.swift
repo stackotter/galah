@@ -117,11 +117,6 @@ public struct TypeChecker {
         fnTable = try Self.buildFnLookupTable(fnDecls, builtinFns)
     }
 
-    enum TypeNode: Hashable {
-        case builtin(Int)
-        case structDecl(Int)
-    }
-
     private func check() throws -> WithDiagnostics<CheckedAST> {
         let structs = try checkStructs(structDecls)
         let fns: WithDiagnostics<[CheckedAST.Fn]> = try fnDecls.map(checkFn).collect()
@@ -137,8 +132,7 @@ public struct TypeChecker {
 
     private func checkStructs(_ structDecls: [WithSpan<StructDecl>]) throws -> [CheckedAST.Struct] {
         var structs: [CheckedAST.Struct] = []
-        var knownStructs: [String] = []
-        for (i, structDecl) in structDecls.enumerated() {
+        for structDecl in structDecls {
             guard !builtinTypes.contains(where: { $0.ident == *structDecl.ident }) else {
                 throw Diagnostic(
                     error: "Duplicate definition of builtin type '\(*structDecl.ident)'",
@@ -147,65 +141,88 @@ public struct TypeChecker {
             }
 
             // TODO: Include span of the original struct once errors can have multiple diagnostics
-            guard !knownStructs.contains(structDecl.ident.inner) else {
+            guard !structs.map(\.ident).contains(structDecl.ident.inner) else {
                 throw Diagnostic(
                     error: "Duplicate definition of struct '\(*structDecl.ident)'",
                     at: structDecl.ident.span
                 )
             }
 
-            // TODO: Implement a custom Deque type for this, probably not great using an Array cause
-            //   we're using it as a FIFO queue for BFS (when searching for cycles).
-            var referencedTypes: [(type: TypeNode, path: [(structDecl: Int, field: Int)])] = []
-            for (fieldIndex, field) in structDecl.fields.enumerated() {
-                guard
-                    !structDecl.fields[0..<fieldIndex]
-                        .contains(where: { *$0.ident == *field.ident })
-                else {
+            var fields: [CheckedAST.Field] = []
+            for field in structDecl.fields {
+                guard !fields.contains(where: { $0.ident == *field.ident }) else {
                     throw Diagnostic(
                         error:
                             "Duplicate definition of field '\(*structDecl.ident).\(*field.ident)'",
                         at: field.span
                     )
                 }
-                referencedTypes.append((try checkType(field.type), [(i, fieldIndex)]))
+                let type = try checkType(field.type)
+                fields.append(CheckedAST.Field(ident: *field.ident, type: type))
             }
 
-            var visitedTypes: Set<TypeNode> = []
-            while !referencedTypes.isEmpty {
-                let (type, path) = referencedTypes.removeFirst()
-                switch type {
-                    case .builtin:
-                        continue
-                    case let .structDecl(index):
-                        guard index != i else {
-                            let ident = *structDecl.ident
-                            let fieldChain = path.map { (structIndex, fieldIndex) in
-                                *structDecls[structIndex].fields[fieldIndex].ident
-                            }.joined(separator: ".")
-                            throw Diagnostic(
-                                error:
-                                    "Struct '\(ident)' references itself via '\(ident).\(fieldChain)'",
-                                at: structDecl.span
-                            )
-                        }
-                        let referencedDecl = structDecls[index]
-                        for (fieldIndex, field) in referencedDecl.fields.enumerated() {
-                            let fieldType = try checkType(field.type)
-                            guard !visitedTypes.contains(fieldType) else {
-                                continue
-                            }
-                            referencedTypes.append((fieldType, path + [(index, fieldIndex)]))
-                            visitedTypes.insert(fieldType)
-                        }
-                }
+            structs.append(CheckedAST.Struct(ident: *structDecl.ident, fields: fields))
+        }
+
+        // Check for self-referential structs
+        let graph = TypeFieldGraph(builtinTypes: builtinTypes, structs: structs)
+        let cycles = graph.cycles()
+        guard cycles.isEmpty else {
+            let diagnostics = diagnoseCycles(graph, cycles)
+            for diagnostic in diagnostics {
+                print(diagnostic.description)
             }
 
-            knownStructs.append(*structDecl.ident)
-            structs.append(CheckedAST.Struct(fieldCount: structDecl.fields.count))
+            // TODO: Refactor so that we can emit multiple errors
+            throw Diagnostic(error: "See above", at: nil)
         }
 
         return structs
+    }
+
+    private func diagnoseCycles(
+        _ graph: TypeFieldGraph, _ cycles: [Path<TypeFieldGraph.Node, TypeFieldGraph.Edge>]
+    ) -> [Diagnostic] {
+        var diagnostics: [Diagnostic] = []
+        var diagnosedTypes: [String] = []
+        for cycle in cycles {
+            for offset in 0..<(cycle.nodes.count - 1) {
+                let rotatedCycle = cycle.offset(by: offset)
+
+                guard !diagnosedTypes.contains(graph.ident(of: rotatedCycle.firstNode)) else {
+                    continue
+                }
+
+                let structDecl: WithSpan<StructDecl>
+                switch rotatedCycle.firstNode {
+                    case .builtin:
+                        diagnostics.append(
+                            Diagnostic(
+                                error: "Precondition failure: struct cycle starts at builtin",
+                                at: nil
+                            ))
+                        continue
+                    case let .struct(index):
+                        // TODO: There's not necessarily a guarantee that the indices from the TypeFieldGraph
+                        //   will match up with the ordering of structDecls. Should probably try to encode that
+                        //   somehow or centralize this functionality.
+                        structDecl = structDecls[index]
+                }
+
+                let fieldAccesses = rotatedCycle.edges.map(graph.ident(of:))
+                    .joined(separator: ".")
+                diagnostics.append(
+                    Diagnostic(
+                        error:
+                            "Struct '\(*structDecl.ident)' references itself via '\(*structDecl.ident).\(fieldAccesses)'",
+                        at: structDecl.span
+                    )
+                )
+                diagnosedTypes.append(*structDecl.ident)
+            }
+        }
+
+        return diagnostics
     }
 
     private func checkFn(_ fn: WithSpan<FnDecl>) throws -> WithDiagnostics<CheckedAST.Fn> {
@@ -237,12 +254,12 @@ public struct TypeChecker {
     }
 
     @discardableResult
-    private func checkType(_ type: WithSpan<Type>) throws -> TypeNode {
+    private func checkType(_ type: WithSpan<Type>) throws -> CheckedAST.TypeIndex {
         let typeName = type.inner.description
         if let builtinIndex = builtinTypes.firstIndex(where: { $0.ident == typeName }) {
             return .builtin(builtinIndex)
         } else if let structIndex = structDecls.firstIndex(where: { *$0.ident == typeName }) {
-            return .structDecl(structIndex)
+            return .struct(structIndex)
         } else {
             throw Diagnostic(error: "No such type '\(typeName)'", at: type.span)
         }

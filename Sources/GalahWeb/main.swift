@@ -124,8 +124,8 @@ button.onclick = .object(
             outputString += "\(message)\n"
         }
 
-        let builtins =
-            Interpreter.defaultBuiltins.filter { $0.signature.ident.inner != "print" } + [
+        let builtinFns =
+            Interpreter.defaultBuiltinFns.filter { $0.signature.ident.inner != "print" } + [
                 BuiltinFn("print") { (x: Int) in
                     customPrint(x)
                 },
@@ -135,7 +135,7 @@ button.onclick = .object(
             ]
 
         do {
-            try Interpreter.run(code, builtins: builtins) { diagnostic in
+            try Interpreter.run(code, builtinFns: builtinFns) { diagnostic in
                 customPrint(diagnostic.formatted(withSourceCode: code))
             }
         } catch let error as Diagnostic {

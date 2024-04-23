@@ -1,7 +1,26 @@
 // swift-tools-version: 5.9
 
 import CompilerPluginSupport
+import Foundation
 import PackageDescription
+
+let noWasm = ProcessInfo.processInfo.environment["NO_WASM"] == "1"
+
+let wasmTarget: Target = .executableTarget(
+    name: "GalahWeb",
+    dependencies: [
+        "GalahInterpreter",
+        "JavaScriptKit",
+    ],
+    linkerSettings: [
+        .unsafeFlags(
+            [
+                "-Xlinker", "--export=main",
+                "-Xclang-linker", "-mexec-model=reactor",
+            ]
+        )
+    ]
+)
 
 let package = Package(
     name: "galah",
@@ -33,21 +52,6 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ]
         ),
-        .executableTarget(
-            name: "GalahWeb",
-            dependencies: [
-                "GalahInterpreter",
-                "JavaScriptKit",
-            ],
-            linkerSettings: [
-                .unsafeFlags(
-                    [
-                        "-Xlinker", "--export=main",
-                        "-Xclang-linker", "-mexec-model=reactor",
-                    ]
-                )
-            ]
-        ),
         .target(
             name: "GalahInterpreter",
             dependencies: [
@@ -70,5 +74,5 @@ let package = Package(
             name: "GalahInterpreterTests",
             dependencies: ["GalahInterpreter"]
         ),
-    ]
+    ] + (noWasm ? [] : [wasmTarget])
 )

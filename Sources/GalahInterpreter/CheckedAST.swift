@@ -15,7 +15,18 @@ public struct CheckedAST {
     }
 
     public struct Struct {
-        public var fieldCount: Int
+        public var ident: String
+        public var fields: [Field]
+    }
+
+    public enum TypeIndex: Hashable {
+        case builtin(Int)
+        case `struct`(Int)
+    }
+
+    public struct Field: Hashable {
+        public var ident: String
+        public var type: TypeIndex
     }
 
     public struct Fn {
