@@ -152,11 +152,21 @@ public struct Interpreter {
             case let .localVar(index):
                 // TODO: Encapsulte this unsafe stuff into a proper locals storage type
                 return locals.withUnsafeBufferPointer { $0[index] }
-            case let .structInit(structInitExpr):
-                let fields = try structInitExpr.fields.map { field in
+            case let .structInit(structInit):
+                let fields = try structInit.fields.map { field in
                     try evaluate(field.inner, &locals)
                 }
                 return fields
+            case let .fieldAccess(fieldAccess):
+                let base = try evaluate(fieldAccess.base.inner.inner, &locals)
+                guard let fields = base as? [Any] else {
+                    throw Diagnostic(
+                        error:
+                            "Precondition failed, expressions resulting in structs must be represented internally as arrays of fields",
+                        at: nil
+                    )
+                }
+                return fields[fieldAccess.fieldIndex]
         }
     }
 

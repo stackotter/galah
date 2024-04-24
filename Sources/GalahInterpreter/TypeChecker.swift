@@ -29,15 +29,115 @@ public struct TypeChecker {
         }
     }
 
+    private struct TypeContext {
+        var builtinTypes: [BuiltinType]
+        var structs: [CheckedAST.Struct]
+
+        let void: CheckedAST.TypeIndex
+        let int: CheckedAST.TypeIndex
+        let string: CheckedAST.TypeIndex
+
+        let voidIdent: String
+        let intIdent: String
+        let stringIdent: String
+
+        init(
+            builtinTypes: [BuiltinType],
+            structs: [CheckedAST.Struct]
+        ) throws {
+            self.builtinTypes = builtinTypes
+            self.structs = structs
+
+            voidIdent = "Void"
+            void = try Self.builtin(named: voidIdent, from: builtinTypes)
+            intIdent = "Int"
+            int = try Self.builtin(named: intIdent, from: builtinTypes)
+            stringIdent = "String"
+            string = try Self.builtin(named: stringIdent, from: builtinTypes)
+        }
+
+        static func builtin(
+            named name: String,
+            from builtinTypes: [BuiltinType]
+        ) throws -> CheckedAST.TypeIndex {
+            guard let index = builtinTypes.firstIndex(where: { $0.ident == name }) else {
+                throw Diagnostic(
+                    error: "Expected to find builtin type named '\(name)'",
+                    at: .builtin
+                )
+            }
+
+            return .builtin(index)
+        }
+
+        func describe(_ typeIndex: CheckedAST.TypeIndex) -> String {
+            switch typeIndex {
+                case let .builtin(index):
+                    builtinTypes[index].ident
+                case let .struct(index):
+                    structs[index].ident
+            }
+        }
+    }
+
+    private struct GlobalContext {
+        var typeContext: TypeContext
+        var fns: [(CheckedAST.FnId, CheckedAST.FnSignature)]
+
+        init(
+            typeContext: TypeContext,
+            fns: [(CheckedAST.FnId, CheckedAST.FnSignature)]
+        ) throws {
+            self.typeContext = typeContext
+            self.fns = fns
+        }
+
+        struct ResolvedFnCall {
+            var id: CheckedAST.FnId
+            var returnType: CheckedAST.TypeIndex
+        }
+
+        func resolveFnCall(
+            _ ident: WithSpan<String>,
+            _ argumentTypes: [CheckedAST.TypeIndex],
+            span: Span
+        ) throws -> ResolvedFnCall {
+            guard
+                let (id, signature) = fns.first(where: { (id, signature) in
+                    signature.ident == *ident && signature.params.map(\.type) == argumentTypes
+                })
+            else {
+                let parameters = argumentTypes.map(typeContext.describe).joined(separator: ", ")
+                let alternativesCount = fns.filter { $0.1.ident == *ident }.count
+                let additionalContext =
+                    if alternativesCount > 0 {
+                        ". Found \(alternativesCount) function\(alternativesCount > 1 ? "s" : "") with the same name but incompatible parameter types"
+                    } else {
+                        ""
+                    }
+                throw Diagnostic(
+                    error: "No such function '\(*ident)' with parameters '(\(parameters))'"
+                        + additionalContext,
+                    at: span
+                )
+            }
+
+            return ResolvedFnCall(
+                id: id,
+                returnType: signature.returnType
+            )
+        }
+    }
+
     private struct FnContext {
         struct Local {
             var ident: String
-            var type: Type
+            var type: CheckedAST.TypeIndex
         }
 
         typealias LocalIndex = Int
 
-        var expectedReturnType: Type
+        var expectedReturnType: CheckedAST.TypeIndex
 
         /// The number of locals in the context.
         var localCount: Int {
@@ -46,6 +146,13 @@ public struct TypeChecker {
 
         private var locals: [Local]
         private var scopes: [[String: LocalIndex]]
+
+        var globalContext: GlobalContext
+
+        var typeContext: TypeContext {
+            globalContext.typeContext
+        }
+
         var diagnostics: [Diagnostic]
 
         private var innermostScope: [String: LocalIndex] {
@@ -58,7 +165,8 @@ public struct TypeChecker {
         }
 
         /// Initializes a context with a single empty root scope.
-        init(expectedReturnType: Type) {
+        init(globalContext: GlobalContext, expectedReturnType: CheckedAST.TypeIndex) {
+            self.globalContext = globalContext
             self.expectedReturnType = expectedReturnType
             locals = []
             scopes = [[:]]
@@ -66,7 +174,7 @@ public struct TypeChecker {
         }
 
         @discardableResult
-        mutating func newLocal(_ ident: String, type: Type) -> LocalIndex {
+        mutating func newLocal(_ ident: String, type: CheckedAST.TypeIndex) -> LocalIndex {
             let index = locals.count
             locals.append(Local(ident: ident, type: type))
             innermostScope[ident] = index
@@ -107,19 +215,39 @@ public struct TypeChecker {
     let builtinFns: [BuiltinFn]
     let structDecls: [WithSpan<StructDecl>]
     let fnDecls: [WithSpan<FnDecl>]
-    let fnTable: [(CheckedAST.FnId, FnSignature)]
 
     private init(_ ast: AST, _ builtinTypes: [BuiltinType], _ builtinFns: [BuiltinFn]) throws {
         self.builtinTypes = builtinTypes
         self.builtinFns = builtinFns
         structDecls = ast.structDecls
         fnDecls = ast.fnDecls
-        fnTable = try Self.buildFnLookupTable(fnDecls, builtinFns)
     }
 
     private func check() throws -> WithDiagnostics<CheckedAST> {
         let structs = try checkStructs(structDecls)
-        let fns: WithDiagnostics<[CheckedAST.Fn]> = try fnDecls.map(checkFn).collect()
+        let typeContext = try TypeContext(builtinTypes: builtinTypes, structs: structs)
+
+        let checkedBuiltinFnSignatures = try checkBuiltinFnSignatures(
+            builtinFns,
+            typeContext: typeContext
+        )
+        let checkedFnDeclSignatures = try checkFnDeclSignatures(
+            fnDecls,
+            checkedBuiltinFns: checkedBuiltinFnSignatures,
+            typeContext: typeContext
+        )
+
+        let globalContext = try GlobalContext(
+            typeContext: typeContext,
+            fns: checkedBuiltinFnSignatures + checkedFnDeclSignatures
+        )
+
+        let fns: WithDiagnostics<[CheckedAST.Fn]> = try zip(fnDecls, checkedFnDeclSignatures)
+            .map { (fnDecl, signature) in
+                try checkFn(fnDecl, signature.1, globalContext)
+            }
+            .collect()
+
         return fns.map { fns in
             CheckedAST(
                 builtinTypes: builtinTypes,
@@ -128,6 +256,70 @@ public struct TypeChecker {
                 fns: fns
             )
         }
+    }
+
+    private func checkBuiltinFnSignatures(
+        _ builtinFns: [BuiltinFn],
+        typeContext: TypeContext
+    ) throws -> [(id: CheckedAST.FnId, signature: CheckedAST.FnSignature)] {
+        var checkedBuiltinFnSignatures: [(CheckedAST.FnId, CheckedAST.FnSignature)] = []
+        for (index, builtinFn) in builtinFns.enumerated() {
+            let checkedFn = try checkBuiltinFn(builtinFn, typeContext)
+
+            guard
+                !checkedBuiltinFnSignatures.contains(where: {
+                    $0.1.ident == *builtinFn.signature.ident && $0.1.params == checkedFn.params
+                })
+            else {
+                let parameterTypes = checkedFn.params.map(\.type).map(typeContext.describe)
+                    .joined(separator: ", ")
+                throw Diagnostic(
+                    error:
+                        "Duplicate definition of function '\(*builtinFn.signature.ident)' with parameter types '(\(parameterTypes))'",
+                    at: builtinFn.signature.ident.span
+                )
+            }
+
+            checkedBuiltinFnSignatures.append(
+                (
+                    .builtin(index: index),
+                    checkedFn
+                )
+            )
+        }
+        return checkedBuiltinFnSignatures
+    }
+
+    private func checkFnDeclSignatures(
+        _ fnDecls: [WithSpan<FnDecl>],
+        checkedBuiltinFns: [(id: CheckedAST.FnId, signature: CheckedAST.FnSignature)],
+        typeContext: TypeContext
+    ) throws -> [(id: CheckedAST.FnId, signature: CheckedAST.FnSignature)] {
+        var checkedFnDeclSignatures: [(CheckedAST.FnId, CheckedAST.FnSignature)] = []
+        for (index, fnDecl) in fnDecls.enumerated() {
+            let checkedFn = try checkFnSignature(fnDecl, typeContext)
+            guard
+                !(checkedBuiltinFns + checkedFnDeclSignatures).contains(where: {
+                    $0.1.ident == *fnDecl.signature.ident && $0.1.params == checkedFn.params
+                })
+            else {
+                let parameterTypes = checkedFn.params.map(\.type).map(typeContext.describe)
+                    .joined(separator: ", ")
+                throw Diagnostic(
+                    error:
+                        "Duplicate definition of function '\(*fnDecl.signature.ident)' with parameter types '(\(parameterTypes))'",
+                    at: fnDecl.signature.ident.span
+                )
+            }
+            checkedFnDeclSignatures.append(
+                (
+                    .userDefined(index: index),
+                    checkedFn
+                )
+            )
+        }
+
+        return checkedFnDeclSignatures
     }
 
     private func checkStructs(_ structDecls: [WithSpan<StructDecl>]) throws -> [CheckedAST.Struct] {
@@ -225,18 +417,64 @@ public struct TypeChecker {
         return diagnostics
     }
 
-    private func checkFn(_ fn: WithSpan<FnDecl>) throws -> WithDiagnostics<CheckedAST.Fn> {
+    private func checkBuiltinFn(
+        _ builtinFn: BuiltinFn,
+        _ typeContext: TypeContext
+    ) throws -> CheckedAST.FnSignature {
+        CheckedAST.FnSignature(
+            ident: *builtinFn.signature.ident,
+            params: try builtinFn.signature.params.map { param in
+                CheckedAST.Param(
+                    ident: *param.ident,
+                    type: try checkType(param.type)
+                )
+            },
+            returnType: try builtinFn.signature.returnType.map(checkType)
+                ?? typeContext.void
+        )
+    }
+
+    private func checkFnSignature(
+        _ fn: WithSpan<FnDecl>,
+        _ typeContext: TypeContext
+    ) throws -> CheckedAST.FnSignature {
+        var seenIdents: [String] = []
+        let params = try fn.signature.params.map { param in
+            guard !seenIdents.contains(*param.ident) else {
+                throw Diagnostic(
+                    error: "Duplicate definition of parameter '\(*param.ident)'", at: param.span)
+            }
+            seenIdents.append(*param.ident)
+            return CheckedAST.Param(
+                ident: *param.ident,
+                type: try checkType(param.type)
+            )
+        }
+
+        let returnType = try fn.signature.returnType.map(checkType) ?? typeContext.void
+
+        return CheckedAST.FnSignature(
+            ident: *fn.signature.ident,
+            params: params,
+            returnType: returnType
+        )
+    }
+
+    private func checkFn(
+        _ fn: WithSpan<FnDecl>,
+        _ checkedSignature: CheckedAST.FnSignature,
+        _ globalContext: GlobalContext
+
+    ) throws -> WithDiagnostics<CheckedAST.Fn> {
         let span = fn.span
         let fn = *fn
 
-        if let returnType = fn.signature.returnType {
-            try checkType(returnType)
-        }
-
-        var context = FnContext(expectedReturnType: fn.signature.returnType?.inner ?? .void)
-        for param in fn.params {
-            try checkType(param.inner.type)
-            context.newLocal(*param.inner.ident, type: *param.inner.type)
+        var context = FnContext(
+            globalContext: globalContext,
+            expectedReturnType: checkedSignature.returnType
+        )
+        for param in checkedSignature.params {
+            context.newLocal(param.ident, type: param.type)
         }
 
         let analyzedStmts = try checkStmts(fn.stmts, &context)
@@ -248,7 +486,10 @@ public struct TypeChecker {
 
         return WithDiagnostics(
             CheckedAST.Fn(
-                signature: fn.signature, localCount: context.localCount, stmts: analyzedStmts.inner),
+                signature: checkedSignature,
+                localCount: context.localCount,
+                stmts: analyzedStmts.inner
+            ),
             context.diagnostics
         )
     }
@@ -302,33 +543,34 @@ public struct TypeChecker {
                     } else {
                         nil
                     }
-                guard (checkedExpr?.type ?? .void) == context.expectedReturnType else {
+                let type = checkedExpr?.type ?? context.globalContext.typeContext.void
+                guard type == context.expectedReturnType else {
                     if let expr, let checkedExpr {
+                        let actualType = context.typeContext.describe(checkedExpr.type)
                         throw Diagnostic(
                             error:
-                                "Function expected to return '\(context.expectedReturnType)', got expression of type '\(checkedExpr.type)'",
+                                "Function expected to return '\(context.expectedReturnType)', got expression of type '\(actualType)'",
                             at: expr.span
                         )
                     } else {
                         throw Diagnostic(
                             error:
-                                "Function expected to return '\(context.expectedReturnType)', got 'Void'",
+                                "Function expected to return '\(context.expectedReturnType)', got '\(context.typeContext.voidIdent)'",
                             at: stmt.span
                         )
                     }
                 }
                 return Analyzed(.return(checkedExpr), returnsOnAllPaths: true)
             case let .let(varDecl):
-                if let type = varDecl.type {
-                    try checkType(type)
-                }
+                let typeAnnotation = try varDecl.type.map(checkType)
 
                 let checkedExpr = try checkExpr(varDecl.value, &context)
 
-                if let type = varDecl.type, checkedExpr.type != *type {
+                if let typeAnnotation = typeAnnotation, checkedExpr.type != typeAnnotation {
+                    let actualType = context.typeContext.describe(checkedExpr.type)
                     throw Diagnostic(
                         error:
-                            "Let binding '\(*varDecl.ident)' expected expression of type '\(*type)', got expression of type '\(checkedExpr.type)'",
+                            "Let binding '\(*varDecl.ident)' expected expression of type '\(context.typeContext.describe(typeAnnotation))', got expression of type '\(actualType)'",
                         at: varDecl.value.span
                     )
                 }
@@ -359,10 +601,10 @@ public struct TypeChecker {
         _ context: inout FnContext
     ) throws -> Analyzed<CheckedAST.IfStmt> {
         let condition = try checkExpr(ifStmt.condition, &context)
-        guard condition.type == Int.type else {
+        guard condition.type == context.typeContext.int else {
             throw Diagnostic(
                 error:
-                    "If statement condition must be of type '\(Int.type)', got \(condition.type)",
+                    "If statement condition must be of type '\(context.typeContext.intIdent)', got \(condition.type)",
                 at: ifStmt.condition.span
             )
         }
@@ -383,10 +625,10 @@ public struct TypeChecker {
             switch elseBlock {
                 case let .elseIf(ifBlock):
                     let condition = try checkExpr(ifBlock.condition, &context)
-                    guard condition.type == Int.type else {
+                    guard condition.type == context.typeContext.int else {
                         throw Diagnostic(
                             error:
-                                "If statement condition must be of type '\(Int.type)', got \(condition.type)",
+                                "If statement condition must be of type '\(context.typeContext.intIdent)', got \(condition.type)",
                             at: ifBlock.condition.span
                         )
                     }
@@ -426,27 +668,56 @@ public struct TypeChecker {
     ) throws -> Typed<CheckedAST.Expr> {
         switch *expr {
             case let .stringLiteral(content):
-                return Typed(.constant(content), String.type)
+                return Typed(.constant(content), context.typeContext.string)
             case let .integerLiteral(value):
-                return Typed(.constant(value), Int.type)
+                return Typed(.constant(value), context.typeContext.int)
             case let .fnCall(fnCallExpr):
                 let arguments = try fnCallExpr.arguments.map { expr in
                     try checkExpr(expr, &context)
                 }
-                let (id, signature) = try resolveFn(
+                let resolvedFn = try context.globalContext.resolveFnCall(
                     fnCallExpr.ident,
                     arguments.map(\.type),
                     span: expr.span
                 )
                 return Typed(
-                    .fnCall(CheckedAST.FnCallExpr(id: id, arguments: arguments)),
-                    signature.returnType?.inner ?? .void
+                    .fnCall(CheckedAST.FnCallExpr(id: resolvedFn.id, arguments: arguments)),
+                    resolvedFn.returnType
                 )
             case let .ident(ident):
                 guard let (index, local) = context.local(for: ident) else {
                     throw Diagnostic(error: "No such variable '\(ident)'", at: expr.span)
                 }
                 return Typed(.localVar(index), local.type)
+            case let .unaryOp(unaryOpExpr):
+                let operand = try checkExpr(unaryOpExpr.operand, &context)
+                let resolvedFn = try context.globalContext.resolveFnCall(
+                    unaryOpExpr.op.map(\.token),
+                    [operand.type],
+                    span: expr.span
+                )
+                return Typed(
+                    .fnCall(CheckedAST.FnCallExpr(id: resolvedFn.id, arguments: [operand])),
+                    resolvedFn.returnType
+                )
+            case let .binaryOp(binaryOpExpr):
+                let leftOperand = try checkExpr(binaryOpExpr.leftOperand, &context)
+                let rightOperand = try checkExpr(binaryOpExpr.rightOperand, &context)
+                let resolvedFn = try context.globalContext.resolveFnCall(
+                    binaryOpExpr.op.map(\.token),
+                    [leftOperand.type, rightOperand.type],
+                    span: expr.span
+                )
+                return Typed(
+                    .fnCall(
+                        CheckedAST.FnCallExpr(
+                            id: resolvedFn.id, arguments: [leftOperand, rightOperand]
+                        )
+                    ),
+                    resolvedFn.returnType
+                )
+            case let .parenthesizedExpr(inner):
+                return try checkExpr(inner, &context)
             case let .structInit(structInit):
                 let type = structInit.ident.map(Type.nominal)
                 let typeIndex = try checkType(type)
@@ -458,10 +729,10 @@ public struct TypeChecker {
                     )
                 }
 
-                let structDecl = structDecls[structIndex]
+                let structDecl = context.typeContext.structs[structIndex]
                 let structInitFieldIdents = structInit.fields.inner.map(\.inner.ident)
-                let structDeclFieldIdents = structDecl.fields.map(\.inner.ident)
-                guard structInitFieldIdents == structDeclFieldIdents else {
+                let structDeclFieldIdents = structDecl.fields.map(\.ident)
+                guard structInitFieldIdents.map(\.inner) == structDeclFieldIdents else {
                     let diagnostics = diagnoseStructInitFieldMismatch(
                         *structInit.ident, structDeclFieldIdents, structInitFieldIdents, expr.span
                     )
@@ -478,11 +749,12 @@ public struct TypeChecker {
                     try checkExpr(field.inner.value, &context)
                 }
 
-                let expectedTypes = structDecl.fields.map(\.type.inner)
+                let expectedTypes = structDecl.fields.map(\.type)
                 let actualTypes = checkedFields.map(\.type)
                 guard actualTypes == expectedTypes else {
                     let diagnostics = diagnoseStructInitFieldTypeMismatch(
-                        *structInit.fields, expectedTypes, actualTypes
+                        *structInit.fields, expectedTypes, actualTypes,
+                        typeContext: context.typeContext
                     )
 
                     // TODO: Emit these properly once emitting multiple diagnostics is supported
@@ -499,40 +771,50 @@ public struct TypeChecker {
                             structId: structIndex, fields: checkedFields
                         )
                     ),
-                    *type
+                    typeIndex
                 )
-            case let .unaryOp(unaryOpExpr):
-                let operand = try checkExpr(unaryOpExpr.operand, &context)
-                let (id, signature) = try resolveFn(
-                    unaryOpExpr.op.map(\.token),
-                    [operand.type],
-                    span: expr.span
-                )
+            case let .memberAccess(memberAccess):
+                let base = try checkExpr(memberAccess.base, &context)
+                guard case let .struct(structIndex) = base.type else {
+                    throw Diagnostic(
+                        error:
+                            "Member accesses cannot be performed on builtin types, got type '\(context.typeContext.describe(base.type))'",
+                        at: expr.span
+                    )
+                }
+
+                let structDecl = context.typeContext.structs[structIndex]
+                guard
+                    let fieldIndex = structDecl.fields.firstIndex(where: {
+                        $0.ident == *memberAccess.memberIdent
+                    })
+                else {
+                    // TODO: Should this be attached to the member ident or the whole expression?
+                    throw Diagnostic(
+                        error:
+                            "Value of type '\(structDecl.ident)' has no such field '\(*memberAccess.memberIdent)'",
+                        at: expr.span
+                    )
+                }
+                let field = structDecl.fields[fieldIndex]
+
                 return Typed(
-                    .fnCall(CheckedAST.FnCallExpr(id: id, arguments: [operand])),
-                    signature.returnType?.inner ?? .void
+                    .fieldAccess(
+                        CheckedAST.FieldAccessExpr(
+                            base: base.map(CheckedAST.Boxed.init),
+                            fieldIndex: fieldIndex
+                        )
+                    ),
+                    field.type
                 )
-            case let .binaryOp(binaryOpExpr):
-                let leftOperand = try checkExpr(binaryOpExpr.leftOperand, &context)
-                let rightOperand = try checkExpr(binaryOpExpr.rightOperand, &context)
-                let (id, signature) = try resolveFn(
-                    binaryOpExpr.op.map(\.token),
-                    [leftOperand.type, rightOperand.type],
-                    span: expr.span
-                )
-                return Typed(
-                    .fnCall(CheckedAST.FnCallExpr(id: id, arguments: [leftOperand, rightOperand])),
-                    signature.returnType?.inner ?? .void
-                )
-            case let .parenthesizedExpr(inner):
-                return try checkExpr(inner, &context)
         }
     }
 
     private func diagnoseStructInitFieldTypeMismatch(
         _ structInitFields: [WithSpan<StructInitField>],
-        _ expectedTypes: [Type],
-        _ actualTypes: [Type]
+        _ expectedTypes: [CheckedAST.TypeIndex],
+        _ actualTypes: [CheckedAST.TypeIndex],
+        typeContext: TypeContext
     ) -> [Diagnostic] {
         var diagnostics: [Diagnostic] = []
         let zipped = zip(structInitFields, zip(actualTypes, expectedTypes))
@@ -545,7 +827,7 @@ public struct TypeChecker {
             diagnostics.append(
                 Diagnostic(
                     error:
-                        "Expected expression of type '\(expectedType)' for field '\(*field.inner.ident)', got '\(actualType)'",
+                        "Expected expression of type '\(typeContext.describe(expectedType))' for field '\(*field.inner.ident)', got '\(typeContext.describe(actualType))'",
                     at: field.inner.value.span
                 )
             )
@@ -556,19 +838,19 @@ public struct TypeChecker {
 
     private func diagnoseStructInitFieldMismatch(
         _ structIdent: String,
-        _ structDeclFieldIdents: [WithSpan<String>],
+        _ structDeclFieldIdents: [String],
         _ structInitFieldIdents: [WithSpan<String>],
         _ structSpan: Span
     ) -> [Diagnostic] {
-        var missingFields: [WithSpan<String>] = []
+        var missingFields: [String] = []
         var extraFields: [WithSpan<String>] = []
         for field in structDeclFieldIdents {
-            if !structInitFieldIdents.contains(field) {
+            if !structInitFieldIdents.map(\.inner).contains(field) {
                 missingFields.append(field)
             }
         }
         for field in structInitFieldIdents {
-            if !structDeclFieldIdents.contains(field) {
+            if !structDeclFieldIdents.contains(field.inner) {
                 extraFields.append(field)
             }
         }
@@ -579,7 +861,7 @@ public struct TypeChecker {
                 diagnostics.append(
                     Diagnostic(
                         error:
-                            "Missing field '\(*missingField)' in initialization of struct '\(structIdent)'",
+                            "Missing field '\(missingField)' in initialization of struct '\(structIdent)'",
                         at: structSpan
                     )
                 )
@@ -597,11 +879,11 @@ public struct TypeChecker {
             for (initField, declField) in zip(
                 structInitFieldIdents, structDeclFieldIdents)
             {
-                if initField.inner != declField.inner {
+                if initField.inner != declField {
                     diagnostics.append(
                         Diagnostic(
                             error:
-                                "'\(declField.inner)' must preceed '\(initField.inner)' in initialization of '\(structIdent)'",
+                                "'\(declField)' must preceed '\(initField.inner)' in initialization of '\(structIdent)'",
                             at: initField.span
                         )
                     )
@@ -618,78 +900,5 @@ public struct TypeChecker {
         }
 
         return diagnostics
-    }
-
-    private func resolveFn(
-        _ ident: WithSpan<String>,
-        _ argumentTypes: [Type],
-        span: Span
-    ) throws -> (CheckedAST.FnId, FnSignature) {
-        guard
-            let (id, signature) = fnTable.first(where: { (_, signature) in
-                *signature.ident == *ident && signature.paramTypes.map(\.inner) == argumentTypes
-            })
-        else {
-            let parameters = argumentTypes.map(\.description).joined(separator: ", ")
-            let alternativesCount = fnTable.filter { *$0.1.ident == *ident }.count
-            let additionalContext =
-                if alternativesCount > 0 {
-                    ". Found \(alternativesCount) function\(alternativesCount > 1 ? "s" : "") with the same name but incompatible parameter types"
-                } else {
-                    ""
-                }
-            throw Diagnostic(
-                error: "No such function '\(*ident)' with parameters '(\(parameters))'"
-                    + additionalContext,
-                at: span
-            )
-        }
-
-        return (id, signature)
-    }
-
-    private static func buildFnLookupTable(
-        _ fnDecls: [WithSpan<FnDecl>],
-        _ builtins: [BuiltinFn]
-    ) throws -> [(CheckedAST.FnId, FnSignature)] {
-        var table: [(CheckedAST.FnId, FnSignature)] = []
-
-        for (i, fn) in builtins.enumerated() {
-            let isDuplicate = table.contains { other in
-                other.1.ident == fn.signature.ident && other.1.paramTypes == fn.signature.paramTypes
-            }
-            if isDuplicate {
-                let paramTypes = fn.signature.paramTypes.map(\.inner.description)
-                    .joined(separator: ", ")
-                let returnType = fn.signature.returnType?.inner ?? .void
-                throw Diagnostic(
-                    error:
-                        "Duplicate definition of builtin '\(fn.signature.ident)' with parameter types '(\(paramTypes)) -> \(returnType)'",
-                    at: fn.signature.ident.span
-                )
-            }
-            table.append((.builtin(index: i), fn.signature))
-        }
-
-        for (i, fn) in fnDecls.enumerated() {
-            let span = fn.span
-            let fn = *fn
-            let isDuplicate = table.contains { other in
-                other.1.ident == fn.ident && other.1.paramTypes == fn.signature.paramTypes
-            }
-            if isDuplicate {
-                let paramTypes = fn.signature.paramTypes.map(\.inner.description)
-                    .joined(separator: ", ")
-                let returnType = fn.signature.returnType?.inner ?? .void
-                throw Diagnostic(
-                    error:
-                        "Duplicate definition of '\(fn.ident)' with type '(\(paramTypes)) -> \(returnType)'",
-                    at: span
-                )
-            }
-            table.append((.userDefined(index: i), fn.signature))
-        }
-
-        return table
     }
 }

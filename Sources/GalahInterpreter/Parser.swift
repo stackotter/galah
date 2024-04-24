@@ -89,6 +89,17 @@ public struct Parser {
 
     @AlsoWithSpan
     private mutating func parseFnDecl() throws -> FnDecl {
+        let signature = try parseFnSignatureWithSpan()
+        skipTrivia()
+        let stmts = try parseCodeBlock()
+        return FnDecl(
+            signature: signature,
+            stmts: stmts
+        )
+    }
+
+    @AlsoWithSpan
+    private mutating func parseFnSignature() throws -> FnSignature {
         try expect(.keyword(.fn))
         try expectWhitespaceSkippingTrivia()
 
@@ -111,24 +122,20 @@ public struct Parser {
         }
         try expect(.rightParen)
 
-        skipTrivia()
-
         let returnType: WithSpan<Type>?
-        if case let .op(op) = peek(), op.token == "->" {
+        if case let .op(op) = peekPastTrivia(), op.token == "->" {
+            skipTrivia()
             next()
             skipTrivia()
             returnType = try parseTypeWithSpan()
-            skipTrivia()
         } else {
             returnType = nil
         }
 
-        let stmts = try parseCodeBlock()
-        return FnDecl(
+        return FnSignature(
             ident: ident,
             params: params,
-            returnType: returnType,
-            stmts: stmts
+            returnType: returnType
         )
     }
 
@@ -258,7 +265,7 @@ public struct Parser {
         }
 
         let startLocation = location()
-        let expr: Expr
+        var expr: Expr
         switch token.token {
             case let .ident(ident):
                 if peek() == .leftParen {
@@ -306,7 +313,19 @@ public struct Parser {
                     at: location()
                 )
         }
-        let endLocation = location()
+        var endLocation = location()
+
+        if case .period = peek() {
+            next()
+            let memberIdent = try expectIdentWithSpan()
+            expr = .memberAccess(
+                MemberAccessExpr(
+                    base: WithSpan(expr, startLocation.span(until: endLocation)),
+                    memberIdent: memberIdent
+                )
+            )
+            endLocation = location()
+        }
 
         let previousIndexBeforeTrivia = previousIndex
         let indexBeforeTrivia = index

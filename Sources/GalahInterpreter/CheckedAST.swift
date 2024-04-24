@@ -6,11 +6,30 @@ public struct CheckedAST {
 
     public struct Typed<Inner> {
         public var inner: Inner
-        public var type: Type
+        public var type: TypeIndex
 
-        public init(_ inner: Inner, _ type: Type) {
+        public init(_ inner: Inner, _ type: TypeIndex) {
             self.inner = inner
             self.type = type
+        }
+
+        public func map<U>(_ map: (Inner) throws -> U) rethrows -> Typed<U> {
+            Typed<U>(
+                try map(inner),
+                type
+            )
+        }
+    }
+
+    public class Boxed<Inner> {
+        public var inner: Inner
+
+        public init(_ inner: Inner) {
+            self.inner = inner
+        }
+
+        public static prefix func * (_ boxed: Boxed<Inner>) -> Inner {
+            boxed.inner
         }
     }
 
@@ -19,12 +38,23 @@ public struct CheckedAST {
         public var fields: [Field]
     }
 
-    public enum TypeIndex: Hashable {
+    public enum TypeIndex: Equatable, Hashable {
         case builtin(Int)
         case `struct`(Int)
     }
 
     public struct Field: Hashable {
+        public var ident: String
+        public var type: TypeIndex
+    }
+
+    public struct FnSignature {
+        public var ident: String
+        public var params: [Param]
+        public var returnType: TypeIndex
+    }
+
+    public struct Param: Equatable {
         public var ident: String
         public var type: TypeIndex
     }
@@ -65,6 +95,7 @@ public struct CheckedAST {
         case fnCall(FnCallExpr)
         case localVar(Int)
         case structInit(StructInitExpr)
+        case fieldAccess(FieldAccessExpr)
     }
 
     public enum FnId {
@@ -82,9 +113,14 @@ public struct CheckedAST {
         public var fields: [Typed<Expr>]
     }
 
-    public func fn(named ident: String, withParamTypes paramTypes: [Type]) -> Fn? {
+    public struct FieldAccessExpr {
+        public var base: Typed<Boxed<Expr>>
+        public var fieldIndex: Int
+    }
+
+    public func fn(named ident: String, withParamTypes paramTypes: [TypeIndex]) -> Fn? {
         fns.first { fn in
-            *fn.signature.ident == ident && fn.signature.paramTypes.map(\.inner) == paramTypes
+            fn.signature.ident == ident && fn.signature.params.map(\.type) == paramTypes
         }
     }
 }

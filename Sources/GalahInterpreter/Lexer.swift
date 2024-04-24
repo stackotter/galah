@@ -3,6 +3,15 @@ public enum Lexer {
     static let identChars = Array("_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
     static let digitChars = Array("0123456789")
     static let operatorChars = Array("+-*/><=!%^&|?~")
+    static let fixedRepresentationTokens: [Character: Token] = [
+        "(": .leftParen,
+        ")": .rightParen,
+        "{": .leftBrace,
+        "}": .rightBrace,
+        ":": .colon,
+        ",": .comma,
+        ".": .period,
+    ]
 
     public static func lex(_ text: String) throws -> [RichToken] {
         var buffer = TextBuffer(text)
@@ -10,7 +19,9 @@ public enum Lexer {
         var tokens: [RichToken] = []
         while let c = buffer.next() {
             let location = buffer.location
-            if firstIdentChars.contains(c) {
+            if let token = fixedRepresentationTokens[c] {
+                tokens.append(RichToken(token, at: location))
+            } else if firstIdentChars.contains(c) {
                 var ident = String(c)
                 while let c = buffer.peek(), identChars.contains(c) {
                     buffer.next()
@@ -70,18 +81,6 @@ public enum Lexer {
                     value += digit
                 }
                 tokens.append(RichToken(.integerLiteral(value), at: location))
-            } else if c == "(" {
-                tokens.append(RichToken(.leftParen, at: location))
-            } else if c == ")" {
-                tokens.append(RichToken(.rightParen, at: location))
-            } else if c == "{" {
-                tokens.append(RichToken(.leftBrace, at: location))
-            } else if c == "}" {
-                tokens.append(RichToken(.rightBrace, at: location))
-            } else if c == ":" {
-                tokens.append(RichToken(.colon, at: location))
-            } else if c == "," {
-                tokens.append(RichToken(.comma, at: location))
             } else if let whitespace = Whitespace(rawValue: c) {
                 tokens.append(RichToken(.trivia(.whitespace(whitespace)), at: location))
             } else if c == "\r\n" {

@@ -38,6 +38,7 @@ public enum Token: Equatable {
     case rightBrace
     case colon
     case comma
+    case period
     case keyword(Keyword)
     case stringLiteral(String)
     case integerLiteral(Int)
@@ -53,6 +54,7 @@ public enum Token: Equatable {
             case .rightBrace: "'}'"
             case .colon: "':'"
             case .comma: "','"
+            case .period: "."
             case let .keyword(keyword): "'\(keyword.rawValue)'"
             case .stringLiteral: "a string literal"
             case .integerLiteral: "an integer literal"
@@ -114,12 +116,7 @@ public enum Token: Equatable {
     public var size: Size {
         switch self {
             case let .ident(ident): Size(columns: ident.count)
-            case .leftParen: 1
-            case .rightParen: 1
-            case .leftBrace: 1
-            case .rightBrace: 1
-            case .colon: 1
-            case .comma: 1
+            case .leftParen, .rightParen, .leftBrace, .rightBrace, .colon, .comma, .period: 1
             case let .keyword(keyword): Size(columns: keyword.rawValue.count)
             case let .stringLiteral(content): Size(ofStringLiteral: content)
             case let .integerLiteral(value): Size(columns: value.description.count)
@@ -140,12 +137,7 @@ public enum Token: Equatable {
     public var characterCount: Int {
         switch self {
             case let .ident(ident): ident.count
-            case .leftParen: 1
-            case .rightParen: 1
-            case .leftBrace: 1
-            case .rightBrace: 1
-            case .colon: 1
-            case .comma: 1
+            case .leftParen, .rightParen, .leftBrace, .rightBrace, .colon, .comma, .period: 1
             case let .keyword(keyword): keyword.rawValue.count
             case let .stringLiteral(content): content.count + 2
             case let .integerLiteral(value): value.description.count

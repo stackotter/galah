@@ -20,38 +20,32 @@ public struct Field {
 
 public struct FnSignature: Hashable {
     public var ident: WithSpan<String>
-    public var paramTypes: [WithSpan<Type>]
+    public var params: [WithSpan<Param>]
     public var returnType: WithSpan<Type>?
 
     public init(
         ident: WithSpan<String>,
-        paramTypes: [WithSpan<Type>],
+        params: [WithSpan<Param>],
         returnType: WithSpan<Type>? = nil
     ) {
         self.ident = ident
-        self.paramTypes = paramTypes
+        self.params = params
         self.returnType = returnType
     }
 
-    public init(builtin ident: String, paramTypes: [Type], returnType: Type? = nil) {
+    public init(builtin ident: String, params: [Param], returnType: Type? = nil) {
         self.ident = WithSpan(builtin: ident)
-        self.paramTypes = paramTypes.map(WithSpan.init(builtin:))
+        self.params = params.map(WithSpan.init(builtin:))
         self.returnType = returnType.map(WithSpan.init(builtin:))
     }
 }
 
 public struct FnDecl {
-    public var ident: WithSpan<String>
-    public var params: [WithSpan<Param>]
-    public var returnType: WithSpan<Type>?
+    public var signature: WithSpan<FnSignature>
     public var stmts: [WithSpan<Stmt>]
-
-    public var signature: FnSignature {
-        FnSignature(ident: ident, paramTypes: params.map(\.type), returnType: returnType)
-    }
 }
 
-public struct Param {
+public struct Param: Hashable {
     public var ident: WithSpan<String>
     public var type: WithSpan<Type>
 }
@@ -119,6 +113,7 @@ public indirect enum Expr {
     case binaryOp(BinaryOpExpr)
     case parenthesizedExpr(WithSpan<Expr>)
     case structInit(StructInitExpr)
+    case memberAccess(MemberAccessExpr)
 }
 
 extension Expr: CustomStringConvertible {
@@ -130,18 +125,20 @@ extension Expr: CustomStringConvertible {
                 return "\(value)"
             case .fnCall(let fnCall):
                 return
-                    "\(fnCall.ident)(\(fnCall.arguments.map(\.inner.description).joined(separator: ", ")))"
+                    "\(*fnCall.ident)(\(fnCall.arguments.map(\.inner.description).joined(separator: ", ")))"
             case .ident(let ident):
                 return ident
             case .unaryOp(let unaryOp):
-                return "\(unaryOp.op)\(unaryOp.operand)"
+                return "\(*unaryOp.op)\(*unaryOp.operand)"
             case .binaryOp(let binaryOp):
-                return "\(binaryOp.leftOperand) + \(binaryOp.rightOperand)"
+                return "\(*binaryOp.leftOperand) \(*binaryOp.op) \(*binaryOp.rightOperand)"
             case .parenthesizedExpr(let expr):
-                return "(\(expr))"
+                return "(\(*expr))"
             case .structInit(let initExpr):
                 return
-                    "\(initExpr.ident) { \(initExpr.fields.inner.map(\.inner.description).joined(separator: ", ")) }"
+                    "\(*initExpr.ident) { \(initExpr.fields.inner.map(\.inner.description).joined(separator: ", ")) }"
+            case .memberAccess(let memberAccessExpr):
+                return "\(*memberAccessExpr.base).\(*memberAccessExpr.memberIdent)"
         }
     }
 }
@@ -158,6 +155,11 @@ public struct StructInitField: CustomStringConvertible {
     public var description: String {
         "\(*ident): \(*value)"
     }
+}
+
+public struct MemberAccessExpr {
+    let base: WithSpan<Expr>
+    let memberIdent: WithSpan<String>
 }
 
 public struct UnaryOpExpr {
