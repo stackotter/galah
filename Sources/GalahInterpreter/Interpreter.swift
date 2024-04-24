@@ -39,14 +39,38 @@ public struct Interpreter {
         BuiltinFn(binaryOp: "-") { (a: Int, b: Int) in
             a - b
         },
+        BuiltinFn(binaryOp: "*") { (a: Int, b: Int) in
+            a * b
+        },
+        BuiltinFn(binaryOp: "/") { (a: Int, b: Int) in
+            a / b
+        },
         BuiltinFn(binaryOp: "==") { (a: Int, b: Int) in
             a == b ? 1 : 0
+        },
+        BuiltinFn(binaryOp: "||") { (a: Int, b: Int) in
+            (a == 1 || b == 1) ? 1 : 0
+        },
+        BuiltinFn(binaryOp: "&&") { (a: Int, b: Int) in
+            (a == 1 && b == 1) ? 1 : 0
         },
         BuiltinFn(unaryOp: "!") { (x: Int) in
             x == 0 ? 1 : 0
         },
         BuiltinFn(unaryOp: "-") { (x: Int) in
             -x
+        },
+        BuiltinFn(binaryOp: ">") { (x: Int, y: Int) in
+            x > y ? 1 : 0
+        },
+        BuiltinFn(binaryOp: "<") { (x: Int, y: Int) in
+            x < y ? 1 : 0
+        },
+        BuiltinFn(binaryOp: ">=") { (x: Int, y: Int) in
+            x >= y ? 1 : 0
+        },
+        BuiltinFn(binaryOp: "<=") { (x: Int, y: Int) in
+            x <= y ? 1 : 0
         },
         BuiltinFn("print") { (x: Int) in
             print(x)

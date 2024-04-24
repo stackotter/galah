@@ -327,6 +327,7 @@ public struct Parser {
             endLocation = location()
         }
 
+        // TODO: Handle operator precedence and associativity
         let previousIndexBeforeTrivia = previousIndex
         let indexBeforeTrivia = index
         let hasWhitespaceBeforeOp = skipTrivia().foundWhitespace
