@@ -76,7 +76,7 @@ create("style") { stylesheet in
         """
 }
 
-create("h1") { $0.textContent = "Galah playgrnd" }
+create("h1") { $0.textContent = "Galah playground" }
 
 create("p") {
     $0.innerHTML =
