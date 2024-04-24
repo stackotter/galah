@@ -1,5 +1,7 @@
 import UtilityMacros
 
+// TODO: Borrow ideas from parser combinators to make some of the more tedious parsing
+//   logic (e.g. parts that have to look ahead) more declarative and composable.
 public struct Parser {
     let tokens: [RichToken]
     var index = 0
@@ -266,6 +268,13 @@ public struct Parser {
                             arguments: try parseTuple().elements
                         )
                     )
+                } else if peekPastTrivia() == .leftBrace {
+                    expr = .structInit(
+                        StructInitExpr(
+                            ident: WithSpan(ident, token.span),
+                            fields: try parseStructInitBlockWithSpan()
+                        )
+                    )
                 } else {
                     expr = .ident(ident)
                 }
@@ -332,6 +341,39 @@ public struct Parser {
     }
 
     @AlsoWithSpan
+    private mutating func parseStructInitBlock() throws -> [WithSpan<StructInitField>] {
+        skipTrivia()
+        try expect(.leftBrace)
+
+        var fields: [WithSpan<StructInitField>] = []
+        skipTrivia()
+        while let token = richPeek(), token.token != .rightBrace {
+            fields.append(try parseStructInitFieldWithSpan())
+            skipTrivia()
+
+            if peek() == .comma {
+                next()
+                skipTrivia()
+            } else {
+                break
+            }
+        }
+
+        try expect(.rightBrace)
+        return fields
+    }
+
+    @AlsoWithSpan
+    private mutating func parseStructInitField() throws -> StructInitField {
+        let ident = try expectIdentWithSpan()
+        skipTrivia()
+        try expect(.colon)
+        skipTrivia()
+        let value = try parseExprWithSpan()
+        return StructInitField(ident: ident, value: value)
+    }
+
+    @AlsoWithSpan
     private mutating func parseTuple() throws -> Tuple {
         try expect(.leftParen)
         skipTrivia()
@@ -370,6 +412,17 @@ public struct Parser {
 
     private func peek() -> Token? {
         richPeek()?.token
+    }
+
+    // TODO: Generalize saving/restoring state to make it more reusable.
+    private mutating func peekPastTrivia() -> Token? {
+        let savedIndex = index
+        let savedPreviousIndex = previousIndex
+        skipTrivia()
+        let token = peek()
+        index = savedIndex
+        previousIndex = savedPreviousIndex
+        return token
     }
 
     /// The location of the token most recently returned by ``Parser/next``.

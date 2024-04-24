@@ -64,6 +64,7 @@ public struct CheckedAST {
         case constant(Any)
         case fnCall(FnCallExpr)
         case localVar(Int)
+        case structInit(StructInitExpr)
     }
 
     public enum FnId {
@@ -74,6 +75,11 @@ public struct CheckedAST {
     public struct FnCallExpr {
         public var id: FnId
         public var arguments: [Typed<Expr>]
+    }
+
+    public struct StructInitExpr {
+        public var structId: Int
+        public var fields: [Typed<Expr>]
     }
 
     public func fn(named ident: String, withParamTypes paramTypes: [Type]) -> Fn? {

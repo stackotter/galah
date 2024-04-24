@@ -118,6 +118,7 @@ public indirect enum Expr {
     case unaryOp(UnaryOpExpr)
     case binaryOp(BinaryOpExpr)
     case parenthesizedExpr(WithSpan<Expr>)
+    case structInit(StructInitExpr)
 }
 
 extension Expr: CustomStringConvertible {
@@ -138,7 +139,24 @@ extension Expr: CustomStringConvertible {
                 return "\(binaryOp.leftOperand) + \(binaryOp.rightOperand)"
             case .parenthesizedExpr(let expr):
                 return "(\(expr))"
+            case .structInit(let initExpr):
+                return
+                    "\(initExpr.ident) { \(initExpr.fields.inner.map(\.inner.description).joined(separator: ", ")) }"
         }
+    }
+}
+
+public struct StructInitExpr {
+    let ident: WithSpan<String>
+    let fields: WithSpan<[WithSpan<StructInitField>]>
+}
+
+public struct StructInitField: CustomStringConvertible {
+    let ident: WithSpan<String>
+    let value: WithSpan<Expr>
+
+    public var description: String {
+        "\(*ident): \(*value)"
     }
 }
 

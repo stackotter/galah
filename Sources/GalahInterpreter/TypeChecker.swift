@@ -447,6 +447,60 @@ public struct TypeChecker {
                     throw Diagnostic(error: "No such variable '\(ident)'", at: expr.span)
                 }
                 return Typed(.localVar(index), local.type)
+            case let .structInit(structInit):
+                let type = structInit.ident.map(Type.nominal)
+                let typeIndex = try checkType(type)
+                guard case let .struct(structIndex) = typeIndex else {
+                    throw Diagnostic(
+                        error:
+                            "Struct initialization syntax can only be used for struct types, got '\(*structInit.ident)'",
+                        at: structInit.ident.span
+                    )
+                }
+
+                let structDecl = structDecls[structIndex]
+                let structInitFieldIdents = structInit.fields.inner.map(\.inner.ident)
+                let structDeclFieldIdents = structDecl.fields.map(\.inner.ident)
+                guard structInitFieldIdents == structDeclFieldIdents else {
+                    let diagnostics = diagnoseStructInitFieldMismatch(
+                        *structInit.ident, structDeclFieldIdents, structInitFieldIdents, expr.span
+                    )
+
+                    // TODO: Emit as proper diagnostics instead of printing (once we can emit multple diagnostics)
+                    for diagnostic in diagnostics {
+                        print(diagnostic.description)
+                    }
+
+                    throw Diagnostic(error: "See above", at: nil)
+                }
+
+                let checkedFields = try structInit.fields.inner.map { field in
+                    try checkExpr(field.inner.value, &context)
+                }
+
+                let expectedTypes = structDecl.fields.map(\.type.inner)
+                let actualTypes = checkedFields.map(\.type)
+                guard actualTypes == expectedTypes else {
+                    let diagnostics = diagnoseStructInitFieldTypeMismatch(
+                        *structInit.fields, expectedTypes, actualTypes
+                    )
+
+                    // TODO: Emit these properly once emitting multiple diagnostics is supported
+                    for diagnostic in diagnostics {
+                        print(diagnostic.description)
+                    }
+
+                    throw Diagnostic(error: "See above", at: nil)
+                }
+
+                return Typed(
+                    .structInit(
+                        CheckedAST.StructInitExpr(
+                            structId: structIndex, fields: checkedFields
+                        )
+                    ),
+                    *type
+                )
             case let .unaryOp(unaryOpExpr):
                 let operand = try checkExpr(unaryOpExpr.operand, &context)
                 let (id, signature) = try resolveFn(
@@ -473,6 +527,97 @@ public struct TypeChecker {
             case let .parenthesizedExpr(inner):
                 return try checkExpr(inner, &context)
         }
+    }
+
+    private func diagnoseStructInitFieldTypeMismatch(
+        _ structInitFields: [WithSpan<StructInitField>],
+        _ expectedTypes: [Type],
+        _ actualTypes: [Type]
+    ) -> [Diagnostic] {
+        var diagnostics: [Diagnostic] = []
+        let zipped = zip(structInitFields, zip(actualTypes, expectedTypes))
+
+        for (field, (actualType, expectedType)) in zipped {
+            guard actualType != expectedType else {
+                continue
+            }
+
+            diagnostics.append(
+                Diagnostic(
+                    error:
+                        "Expected expression of type '\(expectedType)' for field '\(*field.inner.ident)', got '\(actualType)'",
+                    at: field.inner.value.span
+                )
+            )
+        }
+
+        return diagnostics
+    }
+
+    private func diagnoseStructInitFieldMismatch(
+        _ structIdent: String,
+        _ structDeclFieldIdents: [WithSpan<String>],
+        _ structInitFieldIdents: [WithSpan<String>],
+        _ structSpan: Span
+    ) -> [Diagnostic] {
+        var missingFields: [WithSpan<String>] = []
+        var extraFields: [WithSpan<String>] = []
+        for field in structDeclFieldIdents {
+            if !structInitFieldIdents.contains(field) {
+                missingFields.append(field)
+            }
+        }
+        for field in structInitFieldIdents {
+            if !structDeclFieldIdents.contains(field) {
+                extraFields.append(field)
+            }
+        }
+
+        var diagnostics: [Diagnostic] = []
+        if !missingFields.isEmpty || !extraFields.isEmpty {
+            for missingField in missingFields {
+                diagnostics.append(
+                    Diagnostic(
+                        error:
+                            "Missing field '\(*missingField)' in initialization of struct '\(structIdent)'",
+                        at: structSpan
+                    )
+                )
+            }
+            for extraField in extraFields {
+                diagnostics.append(
+                    Diagnostic(
+                        error:
+                            "Unexpected field '\(*extraField)' in initialization of struct '\(structIdent)'",
+                        at: extraField.span
+                    )
+                )
+            }
+        } else {
+            for (initField, declField) in zip(
+                structInitFieldIdents, structDeclFieldIdents)
+            {
+                if initField.inner != declField.inner {
+                    diagnostics.append(
+                        Diagnostic(
+                            error:
+                                "'\(declField.inner)' must preceed '\(initField.inner)' in initialization of '\(structIdent)'",
+                            at: initField.span
+                        )
+                    )
+                    break
+                }
+            }
+            diagnostics.append(
+                Diagnostic(
+                    error:
+                        "Type checker failure: failed to diagnose cause of mismatch between provided fields and declared fields",
+                    at: structSpan
+                )
+            )
+        }
+
+        return diagnostics
     }
 
     private func resolveFn(

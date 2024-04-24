@@ -43,8 +43,17 @@ public struct WithSpan<Inner> {
     }
 }
 
-extension WithSpan: Equatable where Inner: Equatable {}
-extension WithSpan: Hashable where Inner: Hashable {}
+extension WithSpan: Equatable where Inner: Equatable {
+    public static func == (_ lhs: Self, _ rhs: Self) -> Bool {
+        lhs.inner == rhs.inner
+    }
+}
+
+extension WithSpan: Hashable where Inner: Hashable {
+    public func hash(into hasher: inout Hasher) {
+        inner.hash(into: &hasher)
+    }
+}
 
 prefix func * <Inner>(_ span: WithSpan<Inner>) -> Inner {
     span.inner

@@ -150,7 +150,13 @@ public struct Interpreter {
                         return try evaluate(ast.fns[index], arguments: arguments)
                 }
             case let .localVar(index):
+                // TODO: Encapsulte this unsafe stuff into a proper locals storage type
                 return locals.withUnsafeBufferPointer { $0[index] }
+            case let .structInit(structInitExpr):
+                let fields = try structInitExpr.fields.map { field in
+                    try evaluate(field.inner, &locals)
+                }
+                return fields
         }
     }
 
