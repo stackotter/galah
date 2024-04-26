@@ -143,3 +143,5 @@ extension [WithDiagnostics<CheckedAST.Fn>] {
         )
     }
 }
+
+extension [Diagnostic]: Error {}

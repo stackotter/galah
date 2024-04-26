@@ -8,21 +8,27 @@ public struct Interpreter {
         builtinFns: [BuiltinFn] = Self.defaultBuiltinFns,
         diagnosticHandler handleDiagnostic: (Diagnostic) -> Void = { _ in }
     ) throws {
-        let tokens = try Lexer.lex(code)
+        do {
+            let tokens = try Lexer.lex(code)
 
-        let ast = try Parser.parse(tokens)
+            let ast = try Parser.parse(tokens)
 
-        let typeCheckerResult = try TypeChecker.check(ast, builtinTypes, builtinFns)
-        let checkedAST = typeCheckerResult.inner
-        typeCheckerResult.diagnostics.forEach(handleDiagnostic)
+            let typeCheckerResult = try TypeChecker.check(ast, builtinTypes, builtinFns)
+            let checkedAST = typeCheckerResult.inner
+            typeCheckerResult.diagnostics.forEach(handleDiagnostic)
 
-        let interpreter = Interpreter(checkedAST)
+            let interpreter = Interpreter(checkedAST)
 
-        guard let main = interpreter.ast.fn(named: "main", withParamTypes: []) else {
-            throw Diagnostic(error: "Missing 'main' function", at: nil)
+            guard let main = interpreter.ast.fn(named: "main", withParamTypes: []) else {
+                throw Diagnostic(error: "Missing 'main' function", at: nil)
+            }
+
+            _ = try interpreter.evaluate(main, arguments: [])
+        } catch let error as Diagnostic {
+            throw [error]
+        } catch {
+            throw error
         }
-
-        _ = try interpreter.evaluate(main, arguments: [])
     }
 
     public static let defaultBuiltinTypes: [BuiltinType] = [

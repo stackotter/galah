@@ -360,13 +360,7 @@ public struct TypeChecker {
         let graph = TypeFieldGraph(builtinTypes: builtinTypes, structs: structs)
         let cycles = graph.cycles()
         guard cycles.isEmpty else {
-            let diagnostics = diagnoseCycles(graph, cycles)
-            for diagnostic in diagnostics {
-                print(diagnostic.description)
-            }
-
-            // TODO: Refactor so that we can emit multiple errors
-            throw Diagnostic(error: "See above", at: nil)
+            throw diagnoseCycles(graph, cycles)
         }
 
         return structs
@@ -510,11 +504,24 @@ public struct TypeChecker {
         _ stmts: [WithSpan<Stmt>],
         _ context: inout FnContext
     ) throws -> Analyzed<[CheckedAST.Stmt]> {
+        var errors: [Diagnostic] = []
         context.pushScope()
-        let analyzedStmts = try stmts.map { stmt in
-            try checkStmt(stmt, &context)
+        let analyzedStmts = stmts.compactMap { stmt in
+            do {
+                return try checkStmt(stmt, &context)
+            } catch let error as [Diagnostic] {
+                errors.append(contentsOf: error)
+                return nil
+            } catch {
+                errors.append(error as! Diagnostic)
+                return nil
+            }
         }
         context.popScope()
+
+        guard errors.isEmpty else {
+            throw errors
+        }
 
         let lastReachableIndex = analyzedStmts.firstIndex(where: \.returnsOnAllPaths)
         if let lastReachableIndex, lastReachableIndex < stmts.count - 1 {
@@ -733,16 +740,9 @@ public struct TypeChecker {
                 let structInitFieldIdents = structInit.fields.inner.map(\.inner.ident)
                 let structDeclFieldIdents = structDecl.fields.map(\.ident)
                 guard structInitFieldIdents.map(\.inner) == structDeclFieldIdents else {
-                    let diagnostics = diagnoseStructInitFieldMismatch(
+                    throw diagnoseStructInitFieldMismatch(
                         *structInit.ident, structDeclFieldIdents, structInitFieldIdents, expr.span
                     )
-
-                    // TODO: Emit as proper diagnostics instead of printing (once we can emit multple diagnostics)
-                    for diagnostic in diagnostics {
-                        print(diagnostic.description)
-                    }
-
-                    throw Diagnostic(error: "See above", at: nil)
                 }
 
                 let checkedFields = try structInit.fields.inner.map { field in
@@ -752,17 +752,10 @@ public struct TypeChecker {
                 let expectedTypes = structDecl.fields.map(\.type)
                 let actualTypes = checkedFields.map(\.type)
                 guard actualTypes == expectedTypes else {
-                    let diagnostics = diagnoseStructInitFieldTypeMismatch(
+                    throw diagnoseStructInitFieldTypeMismatch(
                         *structInit.fields, expectedTypes, actualTypes,
                         typeContext: context.typeContext
                     )
-
-                    // TODO: Emit these properly once emitting multiple diagnostics is supported
-                    for diagnostic in diagnostics {
-                        print(diagnostic.description)
-                    }
-
-                    throw Diagnostic(error: "See above", at: nil)
                 }
 
                 return Typed(

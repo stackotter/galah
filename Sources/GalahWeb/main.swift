@@ -138,8 +138,10 @@ button.onclick = .object(
             try Interpreter.run(code, builtinFns: builtinFns) { diagnostic in
                 customPrint(diagnostic.formatted(withSourceCode: code))
             }
-        } catch let error as Diagnostic {
-            customPrint(error.formatted(withSourceCode: code))
+        } catch let errors as [Diagnostic] {
+            for error in errors {
+                customPrint(error.formatted(withSourceCode: code))
+            }
         } catch {
             customPrint("\(error)")
         }
