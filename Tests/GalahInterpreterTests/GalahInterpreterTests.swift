@@ -95,4 +95,35 @@ final class GalahInterpreterTests: XCTestCase {
             XCTFail("Self-referential structs must fail to type-check")
         } catch {}
     }
+
+    func testNestedMemberAccesses() throws {
+        let ast = try Parser.parse(
+            try Lexer.lex(
+                """
+                fn main() {
+                    x.a.b
+                }
+                """
+            )
+        )
+
+        XCTAssertEqual(
+            ast.fnDecls[0].stmts[0].inner,
+            .expr(
+                .memberAccess(
+                    MemberAccessExpr.init(
+                        base: WithSpan(
+                            builtin: .memberAccess(
+                                .init(
+                                    base: WithSpan(builtin: .ident("x")),
+                                    memberIdent: WithSpan(builtin: "a")
+                                )
+                            )
+                        ),
+                        memberIdent: WithSpan(builtin: "b")
+                    )
+                )
+            )
+        )
+    }
 }

@@ -315,7 +315,7 @@ public struct Parser {
         }
         var endLocation = location()
 
-        if case .period = peek() {
+        while case .period = peek() {
             next()
             let memberIdent = try expectIdentWithSpan()
             expr = .memberAccess(

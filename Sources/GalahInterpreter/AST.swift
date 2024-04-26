@@ -69,13 +69,13 @@ public enum Type: Hashable, CustomStringConvertible {
     }
 }
 
-public struct VarDecl {
+public struct VarDecl: Equatable {
     public var ident: WithSpan<String>
     public var type: WithSpan<Type>?
     public var value: WithSpan<Expr>
 }
 
-public enum Stmt {
+public enum Stmt: Equatable {
     case expr(Expr)
     case `if`(IfStmt)
     case `return`(WithSpan<Expr>?)
@@ -93,8 +93,8 @@ extension Stmt {
     }
 }
 
-public struct IfStmt {
-    public indirect enum ElseBlock {
+public struct IfStmt: Equatable {
+    public indirect enum ElseBlock: Equatable {
         case elseIf(WithSpan<IfStmt>)
         case `else`([WithSpan<Stmt>])
     }
@@ -104,7 +104,7 @@ public struct IfStmt {
     public var `else`: ElseBlock?
 }
 
-public indirect enum Expr {
+public indirect enum Expr: Equatable {
     case stringLiteral(String)
     case integerLiteral(Int)
     case fnCall(FnCallExpr)
@@ -143,12 +143,12 @@ extension Expr: CustomStringConvertible {
     }
 }
 
-public struct StructInitExpr {
+public struct StructInitExpr: Equatable {
     let ident: WithSpan<String>
     let fields: WithSpan<[WithSpan<StructInitField>]>
 }
 
-public struct StructInitField: CustomStringConvertible {
+public struct StructInitField: CustomStringConvertible, Equatable {
     let ident: WithSpan<String>
     let value: WithSpan<Expr>
 
@@ -157,27 +157,27 @@ public struct StructInitField: CustomStringConvertible {
     }
 }
 
-public struct MemberAccessExpr {
+public struct MemberAccessExpr: Equatable {
     let base: WithSpan<Expr>
     let memberIdent: WithSpan<String>
 }
 
-public struct UnaryOpExpr {
+public struct UnaryOpExpr: Equatable {
     let op: WithSpan<Op>
     let operand: WithSpan<Expr>
 }
 
-public struct BinaryOpExpr {
+public struct BinaryOpExpr: Equatable {
     let op: WithSpan<Op>
     let leftOperand: WithSpan<Expr>
     let rightOperand: WithSpan<Expr>
 }
 
-public struct FnCallExpr {
+public struct FnCallExpr: Equatable {
     public var ident: WithSpan<String>
     public var arguments: [WithSpan<Expr>]
 }
 
-public struct Tuple {
+public struct Tuple: Equatable {
     public var elements: [WithSpan<Expr>]
 }
