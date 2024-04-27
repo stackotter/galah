@@ -87,13 +87,21 @@ final class GalahInterpreterTests: XCTestCase {
             )
         )
 
-        // TODO: Verify the diagnostics emitted once error handling is done with results instead
-        do {
-            _ = try TypeChecker.check(
-                ast, Interpreter.defaultBuiltinTypes, Interpreter.defaultBuiltinFns
-            )
-            XCTFail("Self-referential structs must fail to type-check")
-        } catch {}
+        switch TypeChecker.check(
+            ast, Interpreter.defaultBuiltinTypes, Interpreter.defaultBuiltinFns
+        ) {
+            case .success:
+                XCTFail("Self-referential structs must fail to type-check")
+            case let .failure(diagnostics):
+                XCTAssertEqual(
+                    diagnostics.map(\.description),
+                    [
+                        "error:1:1~3:2: Struct 'Chicken' references itself via 'Chicken.egg.chicken'",
+                        "error:15:1~18:2: Struct 'Egg' references itself via 'Egg.chicken.egg'",
+                        "error:11:1~13:2: Struct 'Fish' references itself via 'Fish.chicken.egg.fish'",
+                    ]
+                )
+        }
     }
 
     func testNestedMemberAccesses() throws {
@@ -108,7 +116,7 @@ final class GalahInterpreterTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            ast.fnDecls[0].stmts[0].inner,
+            ast.fnDecls[0].inner.stmts[0].inner,
             .expr(
                 .memberAccess(
                     MemberAccessExpr.init(

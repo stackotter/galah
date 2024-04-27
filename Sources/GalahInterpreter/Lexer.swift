@@ -42,8 +42,6 @@ public enum Lexer {
                     if c == "\\" && !escapeNextChar {
                         escapeNextChar = true
                     } else if escapeNextChar {
-                        // TODO: Use a switch expression here once I've updated my tree sitter grammars
-                        //   and they don't freak out about switch expressions anymore.
                         let escapedChar: Character
                         switch c {
                             case "\\": escapedChar = "\\"

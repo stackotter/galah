@@ -185,7 +185,7 @@ public struct Interpreter {
                         return try evaluate(ast.fns[index], arguments: arguments)
                 }
             case let .localVar(index):
-                // TODO: Encapsulte this unsafe stuff into a proper locals storage type
+                // TODO: Encapsulate this unsafe stuff into a proper locals storage type
                 return locals.withUnsafeBufferPointer { $0[index] }
             case let .structInit(structInit):
                 let fields = try structInit.fields.map { field in

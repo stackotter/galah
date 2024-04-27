@@ -1012,7 +1012,6 @@ public struct TypeChecker {
                                 $0.ident == *memberAccess.memberIdent
                             })
                         else {
-                            // TODO: Should this be attached to the member ident or the whole expression?
                             return .failure([
                                 Diagnostic(
                                     error:
