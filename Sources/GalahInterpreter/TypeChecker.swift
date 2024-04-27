@@ -762,12 +762,55 @@ public struct TypeChecker {
     ) -> Result<Analyzed<CheckedAST.IfStmt>, [Diagnostic]> {
         return #result {
             (
-                condition: CheckedAST.Typed<CheckedAST.Expr>,
-                checkedIfBlockStmts: Analyzed<[CheckedAST.Stmt]>,
-                elseIfBlocks: [CheckedAST.IfBlock],
-                checkedElseBlockStmts: Analyzed<[CheckedAST.Stmt]>?
+                results: (
+                    condition: CheckedAST.Typed<CheckedAST.Expr>,
+                    checkedIfBlockStmts: Analyzed<[CheckedAST.Stmt]>,
+                    checkedElseIfBlocks: [Analyzed<CheckedAST.IfBlock>],
+                    checkedElseBlockStmts: Analyzed<[CheckedAST.Stmt]>?
+                )
             ) in
-            condition <- checkExpr(ifStmt.condition, &context)
+            let elseBlocks = ifStmt.elseBlocks
+            results
+                <- collectResults(
+                    checkExpr(ifStmt.condition, &context),
+
+                    checkStmts(ifStmt.ifBlock, &context),
+
+                    collect(
+                        elseBlocks.elseIfBlocks.map { elseIfBlock in
+                            #result {
+                                (
+                                    condition: CheckedAST.Typed<CheckedAST.Expr>,
+                                    checkedBlock: Analyzed<[CheckedAST.Stmt]>
+                                ) -> Result<Analyzed<CheckedAST.IfBlock>, [Diagnostic]> in
+                                condition <- checkExpr(elseIfBlock.condition, &context)
+                                guard condition.type == context.typeContext.int else {
+                                    return .failure([
+                                        Diagnostic(
+                                            error:
+                                                "If statement condition must be of type '\(context.typeContext.intIdent)', got \(context.typeContext.describe(condition.type))",
+                                            at: elseIfBlock.condition.span
+                                        )
+                                    ])
+                                }
+                                checkedBlock <- checkStmts(elseIfBlock.stmts, &context)
+                                return .success(
+                                    checkedBlock.map { checkedBlock in
+                                        CheckedAST.IfBlock(
+                                            condition: condition.inner,
+                                            block: checkedBlock
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    ),
+
+                    invert(elseBlocks.elseBlock.map { checkStmts($0, &context) }))
+
+            let (condition, checkedIfBlockStmts, checkedElseIfBlocks, checkedElseBlockStmts) =
+                results
+
             guard condition.type == context.typeContext.int else {
                 return .failure([
                     Diagnostic(
@@ -778,56 +821,22 @@ public struct TypeChecker {
                 ])
             }
 
-            checkedIfBlockStmts <- checkStmts(ifStmt.ifBlock, &context)
             let ifBlock = CheckedAST.IfBlock(
                 condition: condition.inner,
                 block: checkedIfBlockStmts.inner
             )
 
-            let elseBlocks = ifStmt.elseBlocks
-            var returnsOnAllPaths = checkedIfBlockStmts.returnsOnAllPaths
-            elseIfBlocks
-                <- collect(
-                    elseBlocks.elseIfBlocks.map { elseIfBlock in
-                        #result {
-                            (
-                                condition: CheckedAST.Typed<CheckedAST.Expr>,
-                                checkedBlock: Analyzed<[CheckedAST.Stmt]>
-                            ) -> Result<CheckedAST.IfBlock, [Diagnostic]> in
-                            condition <- checkExpr(elseIfBlock.condition, &context)
-                            guard condition.type == context.typeContext.int else {
-                                return .failure([
-                                    Diagnostic(
-                                        error:
-                                            "If statement condition must be of type '\(context.typeContext.intIdent)', got \(context.typeContext.describe(condition.type))",
-                                        at: elseIfBlock.condition.span
-                                    )
-                                ])
-                            }
-                            checkedBlock <- checkStmts(elseIfBlock.stmts, &context)
-                            returnsOnAllPaths =
-                                returnsOnAllPaths && checkedBlock.returnsOnAllPaths
-                            return .success(
-                                CheckedAST.IfBlock(
-                                    condition: condition.inner,
-                                    block: checkedBlock.inner
-                                )
-                            )
-                        }
-                    }
-                )
-
-            checkedElseBlockStmts <- invert(elseBlocks.elseBlock.map { checkStmts($0, &context) })
-
             let checkedElseBlock: [CheckedAST.Stmt]? = checkedElseBlockStmts?.inner
-            returnsOnAllPaths =
-                returnsOnAllPaths && checkedElseBlockStmts?.returnsOnAllPaths == true
+            let returnsOnAllPaths =
+                checkedIfBlockStmts.returnsOnAllPaths
+                && checkedElseIfBlocks.allSatisfy(\.returnsOnAllPaths)
+                && checkedElseBlockStmts?.returnsOnAllPaths == true
 
             return .success(
                 Analyzed(
                     CheckedAST.IfStmt(
                         ifBlock: ifBlock,
-                        elseIfBlocks: elseIfBlocks,
+                        elseIfBlocks: checkedElseIfBlocks.map(\.inner),
                         elseBlock: checkedElseBlock
                     ),
                     returnsOnAllPaths: returnsOnAllPaths
