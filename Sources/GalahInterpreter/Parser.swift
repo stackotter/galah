@@ -327,7 +327,6 @@ public struct Parser {
             endLocation = location()
         }
 
-        // TODO: Handle operator precedence and associativity
         let previousIndexBeforeTrivia = previousIndex
         let indexBeforeTrivia = index
         let hasWhitespaceBeforeOp = skipTrivia().foundWhitespace
@@ -346,13 +345,30 @@ public struct Parser {
 
             let rightOperand = try parseExprWithSpan()
             let exprWithSpan = WithSpan(expr, startLocation.span(until: endLocation))
-            return .binaryOp(
-                BinaryOpExpr(
-                    op: WithSpan(op, token.span),
-                    leftOperand: exprWithSpan,
-                    rightOperand: rightOperand
+            if case let .binaryOpChain(chain) = rightOperand.inner {
+                let newItem = BinaryOpChainExpr.Item(
+                    operand: exprWithSpan,
+                    op: WithSpan(op, token.span)
                 )
-            )
+                return .binaryOpChain(
+                    BinaryOpChainExpr(
+                        chain: [newItem] + chain.chain,
+                        lastOperand: chain.lastOperand
+                    )
+                )
+            } else {
+                return .binaryOpChain(
+                    BinaryOpChainExpr(
+                        chain: [
+                            BinaryOpChainExpr.Item(
+                                operand: exprWithSpan,
+                                op: WithSpan(op, token.span)
+                            )
+                        ],
+                        lastOperand: rightOperand
+                    )
+                )
+            }
         } else {
             previousIndex = previousIndexBeforeTrivia
             index = indexBeforeTrivia

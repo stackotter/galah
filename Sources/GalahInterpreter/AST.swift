@@ -134,7 +134,7 @@ public indirect enum Expr: Equatable {
     case fnCall(FnCallExpr)
     case ident(String)
     case unaryOp(UnaryOpExpr)
-    case binaryOp(BinaryOpExpr)
+    case binaryOpChain(BinaryOpChainExpr)
     case parenthesizedExpr(WithSpan<Expr>)
     case structInit(StructInitExpr)
     case memberAccess(MemberAccessExpr)
@@ -154,8 +154,11 @@ extension Expr: CustomStringConvertible {
                 return ident
             case .unaryOp(let unaryOp):
                 return "\(*unaryOp.op)\(*unaryOp.operand)"
-            case .binaryOp(let binaryOp):
-                return "\(*binaryOp.leftOperand) \(*binaryOp.op) \(*binaryOp.rightOperand)"
+            case .binaryOpChain(let binaryOpChain):
+                let chain = binaryOpChain.chain.map { item in
+                    "\(*item.operand) \(*item.op)"
+                }
+                return "\(chain) \(*binaryOpChain.lastOperand)"
             case .parenthesizedExpr(let expr):
                 return "(\(*expr))"
             case .structInit(let initExpr):
@@ -168,13 +171,13 @@ extension Expr: CustomStringConvertible {
 }
 
 public struct StructInitExpr: Equatable {
-    let ident: WithSpan<String>
-    let fields: WithSpan<[WithSpan<StructInitField>]>
+    public var ident: WithSpan<String>
+    public var fields: WithSpan<[WithSpan<StructInitField>]>
 }
 
 public struct StructInitField: CustomStringConvertible, Equatable {
-    let ident: WithSpan<String>
-    let value: WithSpan<Expr>
+    public var ident: WithSpan<String>
+    public var value: WithSpan<Expr>
 
     public var description: String {
         "\(*ident): \(*value)"
@@ -182,19 +185,33 @@ public struct StructInitField: CustomStringConvertible, Equatable {
 }
 
 public struct MemberAccessExpr: Equatable {
-    let base: WithSpan<Expr>
-    let memberIdent: WithSpan<String>
+    public var base: WithSpan<Expr>
+    public var memberIdent: WithSpan<String>
 }
 
 public struct UnaryOpExpr: Equatable {
-    let op: WithSpan<Op>
-    let operand: WithSpan<Expr>
+    public var op: WithSpan<Op>
+    public var operand: WithSpan<Expr>
 }
 
-public struct BinaryOpExpr: Equatable {
-    let op: WithSpan<Op>
-    let leftOperand: WithSpan<Expr>
-    let rightOperand: WithSpan<Expr>
+/// A chain of binary operators and expressions (e.g. `1 + 2 * 3 / 4`). The ``Parser`` doesn't
+/// handle precedence and associativity so this is a flat structure.
+public struct BinaryOpChainExpr: Equatable {
+    public var chain: [Item]
+    public var lastOperand: WithSpan<Expr>
+
+    public var operands: [WithSpan<Expr>] {
+        chain.map(\.operand) + [lastOperand]
+    }
+
+    public var operators: [WithSpan<Op>] {
+        chain.map(\.op)
+    }
+
+    public struct Item: Equatable {
+        public var operand: WithSpan<Expr>
+        public var op: WithSpan<Op>
+    }
 }
 
 public struct FnCallExpr: Equatable {

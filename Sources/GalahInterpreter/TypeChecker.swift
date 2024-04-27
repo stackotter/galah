@@ -1,6 +1,20 @@
 import UtilityMacros
 
 public struct TypeChecker {
+    static let operatorPrecedenceLookupTable: [String: Int] = [
+        "+": 10,
+        "-": 10,
+        "*": 20,
+        "/": 20,
+        "==": 6,
+        "||": 5,
+        "&&": 5,
+        ">": 8,
+        "<": 8,
+        ">=": 8,
+        "<=": 8,
+    ]
+
     public static func check(
         _ ast: AST,
         _ builtinTypes: [BuiltinType],
@@ -908,31 +922,91 @@ public struct TypeChecker {
                             )
                         )
                     }
-                case let .binaryOp(binaryOpExpr):
+                case let .binaryOpChain(binaryOpChain):
+                    /*
+                                   _ + _ * _ * _ + _ - _ / _ + _ + _    (all left associative)
+                        precedence   1   2   2   1   1   2   1   1      (these precedences are simplified)
+
+                        proposal: when scanning left to right, you can reduce any left associative operator that's >= the
+                          precedence of the operator to its right and > the precedence of the operator to its left.
+                          if two operators of the same precedence and mixed associativity occur adjacently, that's
+                          an error. the opposite conditions can be used for right associative operators.
+
+                            _ + _ * _ * _ + _ - _ / _ + _ + _
+                            _ + ((_ * _) * _) + _ - (_ / _) + _ + _
+                            (((((_ + ((_ * _) * _)) + _) - (_ / _)) + _) + _)
+
+                        solved in 2 iterations :partying_face: (quadratic in the worst case; in practice we need to perform
+                        a bunch of removals, but there are exactly n removals to perform which is also quadratic in the worst
+                        case, so doesn't change the time complexity)
+
+                        i messed around with a tree based approach and i'm pretty sure that it's basically equivalent.
+                        here the numbers are the indices of the operators from left to right. operators above can only
+                        be reduced (replaced with their result) when all operators below them have been reduced.
+
+                                        8
+                                       /
+                                      7
+                                     /
+                                    5
+                                   / \
+                                  4   6
+                                 /
+                                1
+                               /
+                              3
+                             /
+                            2
+                    */
                     return #result {
                         (
-                            leftOperand: CheckedAST.Typed<CheckedAST.Expr>,
-                            rightOperand: CheckedAST.Typed<CheckedAST.Expr>,
-                            resolvedFn: GlobalContext.ResolvedFnCall
+                            operands: [CheckedAST.Typed<CheckedAST.Expr>]
                         ) in
-                        leftOperand <- checkExpr(binaryOpExpr.leftOperand, &context)
-                        rightOperand <- checkExpr(binaryOpExpr.rightOperand, &context)
-                        resolvedFn
-                            <- context.globalContext.resolveFnCall(
-                                binaryOpExpr.op.map(\.token),
-                                [leftOperand.type, rightOperand.type],
-                                span: expr.span
-                            )
-                        return .success(
-                            Typed(
-                                .fnCall(
-                                    CheckedAST.FnCallExpr(
-                                        id: resolvedFn.id, arguments: [leftOperand, rightOperand]
-                                    )
-                                ),
-                                resolvedFn.returnType
-                            )
-                        )
+                        operands
+                            <- collect(
+                                binaryOpChain.operands.map { operand in
+                                    checkExpr(operand, &context)
+                                })
+                        var operators = binaryOpChain.operators
+                        var precedences = operators.map { op in
+                            Self.operatorPrecedenceLookupTable[op.inner.token]!
+                        }
+                        var reducedOperands = operands
+                        while !operators.isEmpty {
+                            var i = 0
+                            while i < operators.count {
+                                let precedence = precedences[i]
+                                let trumpsLeft = i == 0 || precedences[i - 1] < precedence
+                                let trumpsRight =
+                                    i == precedences.count - 1 || precedences[i + 1] <= precedence
+                                if trumpsLeft && trumpsRight {
+                                    precedences.remove(at: i)
+                                    let op = operators.remove(at: i)
+                                    let leftOperand = reducedOperands[i]
+                                    let rightOperand = reducedOperands.remove(at: i + 1)
+                                    switch context.globalContext.resolveFnCall(
+                                        op.map(\.token), [leftOperand.type, rightOperand.type],
+                                        span: .builtin)
+                                    {
+                                        case let .success(resolvedFn):
+                                            reducedOperands[i] = Typed(
+                                                .fnCall(
+                                                    CheckedAST.FnCallExpr(
+                                                        id: resolvedFn.id,
+                                                        arguments: [leftOperand, rightOperand]
+                                                    )
+                                                ),
+                                                resolvedFn.returnType
+                                            )
+                                        case let .failure(diagnostics):
+                                            return .failure(diagnostics)
+                                    }
+                                } else {
+                                    i += 1
+                                }
+                            }
+                        }
+                        return .success(reducedOperands[0])
                     }
                 case let .parenthesizedExpr(inner):
                     return checkExpr(inner, &context)
