@@ -13,11 +13,16 @@ public struct Interpreter {
 
             let ast = try Parser.parse(tokens)
 
-            let typeCheckerResult = try TypeChecker.check(ast, builtinTypes, builtinFns)
-            let checkedAST = typeCheckerResult.inner
-            typeCheckerResult.diagnostics.forEach(handleDiagnostic)
+            let checkedAST: WithDiagnostics<CheckedAST>
+            switch TypeChecker.check(ast, builtinTypes, builtinFns) {
+                case let .success(value):
+                    checkedAST = value
+                case let .failure(diagnostics):
+                    throw diagnostics
+            }
+            checkedAST.diagnostics.forEach(handleDiagnostic)
 
-            let interpreter = Interpreter(checkedAST)
+            let interpreter = Interpreter(checkedAST.inner)
 
             guard let main = interpreter.ast.fn(named: "main", withParamTypes: []) else {
                 throw Diagnostic(error: "Missing 'main' function", at: nil)

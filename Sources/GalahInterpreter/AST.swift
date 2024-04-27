@@ -102,6 +102,30 @@ public struct IfStmt: Equatable {
     public var condition: WithSpan<Expr>
     public var ifBlock: [WithSpan<Stmt>]
     public var `else`: ElseBlock?
+
+    public var elseBlocks:
+        (
+            elseIfBlocks: [(condition: WithSpan<Expr>, stmts: [WithSpan<Stmt>])],
+            elseBlock: [WithSpan<Stmt>]?
+        )
+    {
+        let elseIfBlocks: [(condition: WithSpan<Expr>, stmts: [WithSpan<Stmt>])]
+        let elseBlock: [WithSpan<Stmt>]?
+        switch `else` {
+            case let .elseIf(elseIfBlock):
+                let blocks = elseIfBlock.inner.elseBlocks
+                elseIfBlocks =
+                    [(elseIfBlock.inner.condition, elseIfBlock.inner.ifBlock)] + blocks.elseIfBlocks
+                elseBlock = blocks.elseBlock
+            case let .else(block):
+                elseIfBlocks = []
+                elseBlock = block
+            case nil:
+                elseIfBlocks = []
+                elseBlock = nil
+        }
+        return (elseIfBlocks, elseBlock)
+    }
 }
 
 public indirect enum Expr: Equatable {

@@ -145,3 +145,20 @@ extension [WithDiagnostics<CheckedAST.Fn>] {
 }
 
 extension [Diagnostic]: Error {}
+
+protocol Foldable<Element>: Error {
+    associatedtype Element
+    func fold(into result: inout [Element])
+}
+
+extension Diagnostic: Foldable {
+    func fold(into result: inout [Diagnostic]) {
+        result.append(self)
+    }
+}
+
+extension [Diagnostic]: Foldable {
+    func fold(into result: inout [Diagnostic]) {
+        result.append(contentsOf: self)
+    }
+}

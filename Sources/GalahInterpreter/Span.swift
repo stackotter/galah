@@ -14,19 +14,19 @@ public enum Span: Equatable, Hashable {
     }
 }
 
-@dynamicMemberLookup
+// @dynamicMemberLookup
 public struct WithSpan<Inner> {
     public var inner: Inner
     public var span: Span
 
-    public subscript<U>(dynamicMember keyPath: WritableKeyPath<Inner, U>) -> U {
-        get {
-            inner[keyPath: keyPath]
-        }
-        set {
-            inner[keyPath: keyPath] = newValue
-        }
-    }
+    // public subscript<U>(dynamicMember keyPath: WritableKeyPath<Inner, U>) -> U {
+    //     get {
+    //         inner[keyPath: keyPath]
+    //     }
+    //     set {
+    //         inner[keyPath: keyPath] = newValue
+    //     }
+    // }
 
     public init(_ inner: Inner, _ span: Span) {
         self.inner = inner
