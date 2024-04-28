@@ -1,8 +1,9 @@
+@dynamicMemberLookup
 public struct Interpreter {
     /// - Parameters:
     ///   - builtinFns: The builtin functions that will be available to the script.
     ///     Defaults to ``Interpreter/defaultBuiltinFns``.
-    public static func run(
+    public init(
         _ code: String,
         builtinTypes: [BuiltinType] = Self.defaultBuiltinTypes,
         builtinFns: [BuiltinFn] = Self.defaultBuiltinFns,
@@ -22,13 +23,7 @@ public struct Interpreter {
             }
             checkedAST.diagnostics.forEach(handleDiagnostic)
 
-            let interpreter = Interpreter(checkedAST.inner)
-
-            guard let main = interpreter.ast.fn(named: "main", withParamTypes: []) else {
-                throw Diagnostic(error: "Missing 'main' function", at: nil)
-            }
-
-            _ = try interpreter.evaluate(main, arguments: [])
+            self.ast = checkedAST.inner
         } catch let error as Diagnostic {
             throw [error]
         } catch {
@@ -99,6 +94,55 @@ public struct Interpreter {
 
     public init(_ ast: CheckedAST) {
         self.ast = ast
+    }
+
+    public func evaluateMainFn() throws {
+        guard let fn = ast.fn(named: "main", withParamTypes: []) else {
+            throw Diagnostic(error: "Missing 'main' function", at: nil)
+        }
+
+        guard fn.signature.returnType == ast.typeContext.void else {
+            throw Diagnostic(error: "'main' function must return 'Void'", at: nil)
+        }
+
+        _ = try evaluate(fn, arguments: [])
+    }
+
+    public subscript<R: GalahRepresentable>(dynamicMember fnName: String) -> (
+        (any GalahRepresentable...) throws -> R
+    ) {
+        { arguments in
+            try evaluateFn(named: fnName, arguments: arguments)
+        }
+    }
+
+    public func evaluateFn<R: GalahRepresentable>(
+        named name: String,
+        arguments: [any GalahRepresentable]
+    ) throws -> R {
+        let parameterTypes = arguments.map { type(of: $0).type }
+        let checkedParameterTypes = try collect(
+            parameterTypes.map { type in
+                ast.typeContext.checkType(type)
+            }
+        ).get()
+
+        guard let fn = ast.fn(named: name, withParamTypes: checkedParameterTypes) else {
+            let parameterTypesList = parameterTypes.map(\.description).joined(separator: ", ")
+            throw Diagnostic(
+                error: "No such function '\(name)' with parameter types '(\(parameterTypesList))'",
+                at: nil
+            )
+        }
+
+        guard fn.signature.returnType == (try ast.typeContext.checkType(R.type).get()) else {
+            throw Diagnostic(
+                error: "No such function '\(name) with return type '\(R.type.description)'",
+                at: nil
+            )
+        }
+
+        return try evaluate(fn, arguments: arguments) as! R
     }
 
     public func evaluate(_ fn: CheckedAST.Fn, arguments: [Any]) throws -> Any {
@@ -185,8 +229,7 @@ public struct Interpreter {
                         return try evaluate(ast.fns[index], arguments: arguments)
                 }
             case let .localVar(index):
-                // TODO: Encapsulate this unsafe stuff into a proper locals storage type
-                return locals.withUnsafeBufferPointer { $0[index] }
+                return locals[index]
             case let .structInit(structInit):
                 let fields = try structInit.fields.map { field in
                     try evaluate(field.inner, &locals)

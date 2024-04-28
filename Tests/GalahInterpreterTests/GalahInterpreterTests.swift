@@ -90,7 +90,8 @@ final class GalahInterpreterTests: XCTestCase {
         switch TypeChecker.check(
             ast, Interpreter.defaultBuiltinTypes, Interpreter.defaultBuiltinFns
         ) {
-            case .success:
+            case .success(let value):
+                print(value)
                 XCTFail("Self-referential structs must fail to type-check")
             case let .failure(diagnostics):
                 XCTAssertEqual(
@@ -133,5 +134,21 @@ final class GalahInterpreterTests: XCTestCase {
                 )
             )
         )
+    }
+
+    func testFibonacci() throws {
+        let interpreter = try Interpreter(
+            """
+            fn fibonacci(n: Int) -> Int {
+                if n == 1 || n == 2 {
+                    return 1
+                } else {
+                    return fibonacci(n - 1) + fibonacci(n - 2)
+                }
+            }
+            """
+        )
+        let result: Int = try interpreter.fibonacci(20)
+        XCTAssertEqual(result, 6765)
     }
 }

@@ -30,9 +30,10 @@ struct Cli: ParsableCommand {
         }
 
         do {
-            try Interpreter.run(sourceCode) { diagnostic in
+            let interpreter = try Interpreter(sourceCode) { diagnostic in
                 eprint(diagnostic.formatted(withSourceCode: sourceCode))
             }
+            try interpreter.evaluateMainFn()
         } catch let errors as [Diagnostic] {
             for error in errors {
                 eprint(error.formatted(withSourceCode: sourceCode))

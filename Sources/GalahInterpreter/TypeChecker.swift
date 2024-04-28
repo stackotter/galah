@@ -45,82 +45,12 @@ public struct TypeChecker {
         }
     }
 
-    private struct TypeContext {
-        var builtinTypes: [BuiltinType]
-        var structs: [CheckedAST.Struct]
-
-        let void: CheckedAST.TypeIndex
-        let int: CheckedAST.TypeIndex
-        let string: CheckedAST.TypeIndex
-
-        let voidIdent: String
-        let intIdent: String
-        let stringIdent: String
-
-        static func create(
-            builtinTypes: [BuiltinType],
-            structs: [CheckedAST.Struct]
-        ) -> Result<TypeContext, [Diagnostic]> {
-            let voidIdent = "Void"
-            let intIdent = "Int"
-            let stringIdent = "String"
-
-            return #result {
-                (
-                    void: CheckedAST.TypeIndex,
-                    int: CheckedAST.TypeIndex,
-                    string: CheckedAST.TypeIndex
-                ) in
-                void <- Self.builtin(named: voidIdent, from: builtinTypes)
-                int <- Self.builtin(named: intIdent, from: builtinTypes)
-                string <- Self.builtin(named: stringIdent, from: builtinTypes)
-                return Result<_, [Diagnostic]>.success(
-                    TypeContext(
-                        builtinTypes: builtinTypes,
-                        structs: structs,
-                        void: void,
-                        int: int,
-                        string: string,
-                        voidIdent: voidIdent,
-                        intIdent: intIdent,
-                        stringIdent: stringIdent
-                    )
-                )
-            }
-        }
-
-        static func builtin(
-            named name: String,
-            from builtinTypes: [BuiltinType]
-        ) -> Result<CheckedAST.TypeIndex, [Diagnostic]> {
-            guard let index = builtinTypes.firstIndex(where: { $0.ident == name }) else {
-                return .failure([
-                    Diagnostic(
-                        error: "Expected to find builtin type named '\(name)'",
-                        at: .builtin
-                    )
-                ])
-            }
-
-            return .success(.builtin(index))
-        }
-
-        func describe(_ typeIndex: CheckedAST.TypeIndex) -> String {
-            switch typeIndex {
-                case let .builtin(index):
-                    builtinTypes[index].ident
-                case let .struct(index):
-                    structs[index].ident
-            }
-        }
-    }
-
     private struct GlobalContext {
-        var typeContext: TypeContext
+        var typeContext: CheckedAST.TypeContext
         var fns: [(CheckedAST.FnId, CheckedAST.FnSignature)]
 
         init(
-            typeContext: TypeContext,
+            typeContext: CheckedAST.TypeContext,
             fns: [(CheckedAST.FnId, CheckedAST.FnSignature)]
         ) {
             self.typeContext = typeContext
@@ -188,7 +118,7 @@ public struct TypeChecker {
 
         var globalContext: GlobalContext
 
-        var typeContext: TypeContext {
+        var typeContext: CheckedAST.TypeContext {
             globalContext.typeContext
         }
 
@@ -265,7 +195,7 @@ public struct TypeChecker {
     private func check() -> Result<WithDiagnostics<CheckedAST>, [Diagnostic]> {
         #result {
             (
-                structs: [CheckedAST.Struct], typeContext: TypeContext,
+                structs: [CheckedAST.Struct], typeContext: CheckedAST.TypeContext,
                 checkedBuiltinFnSignatures: [(
                     id: CheckedAST.FnId, signature: CheckedAST.FnSignature
                 )],
@@ -273,7 +203,8 @@ public struct TypeChecker {
                 fns: WithDiagnostics<[CheckedAST.Fn]>
             ) in
             structs <- checkStructs(structDecls)
-            typeContext <- TypeContext.create(builtinTypes: builtinTypes, structs: structs)
+            typeContext
+                <- CheckedAST.TypeContext.create(builtinTypes: builtinTypes, structs: structs)
 
             checkedBuiltinFnSignatures
                 <- checkBuiltinFnSignatures(
@@ -306,8 +237,7 @@ public struct TypeChecker {
             return .success(
                 fns.map { fns in
                     CheckedAST(
-                        builtinTypes: builtinTypes,
-                        structs: structs,
+                        typeContext: typeContext,
                         builtinFns: builtinFns,
                         fns: fns
                     )
@@ -318,7 +248,7 @@ public struct TypeChecker {
 
     private func checkBuiltinFnSignatures(
         _ builtinFns: [BuiltinFn],
-        typeContext: TypeContext
+        typeContext: CheckedAST.TypeContext
     ) -> Result<[(id: CheckedAST.FnId, signature: CheckedAST.FnSignature)], [Diagnostic]> {
         var checkedBuiltinFnSignatures: [(id: CheckedAST.FnId, signature: CheckedAST.FnSignature)] =
             []
@@ -358,7 +288,7 @@ public struct TypeChecker {
     private func checkFnDeclSignatures(
         _ fnDecls: [WithSpan<FnDecl>],
         checkedBuiltinFns: [(id: CheckedAST.FnId, signature: CheckedAST.FnSignature)],
-        typeContext: TypeContext
+        typeContext: CheckedAST.TypeContext
     ) -> Result<[(id: CheckedAST.FnId, signature: CheckedAST.FnSignature)], [Diagnostic]> {
         var checkedFnDeclSignatures: [(id: CheckedAST.FnId, signature: CheckedAST.FnSignature)] = []
         return collect(
@@ -451,7 +381,15 @@ public struct TypeChecker {
                                                     )
                                                 ])
                                             }
-                                            checkedType <- checkType(field.inner.type)
+                                            checkedType
+                                                <- CheckedAST.TypeContext.checkType(
+                                                    field.inner.type.inner,
+                                                    span: field.inner.type.span,
+                                                    builtinTypeIdents: builtinTypes.lazy
+                                                        .map(\.ident),
+                                                    structIdents: structDecls.lazy
+                                                        .map(\.inner.ident.inner)
+                                                )
                                             seenFields.append(*field.inner.ident)
                                             return .success(
                                                 CheckedAST.Field(
@@ -527,14 +465,14 @@ public struct TypeChecker {
 
     private func checkBuiltinFn(
         _ builtinFn: BuiltinFn,
-        _ typeContext: TypeContext
+        _ typeContext: CheckedAST.TypeContext
     ) -> Result<CheckedAST.FnSignature, [Diagnostic]> {
         #result { (params: [CheckedAST.Param], returnType: CheckedAST.TypeIndex?) in
             params
                 <- collect(
                     builtinFn.signature.params.map {
                         (param: WithSpan<Param>) -> Result<CheckedAST.Param, [Diagnostic]> in
-                        checkType(param.inner.type).map { checkedType in
+                        typeContext.checkType(param.inner.type).map { checkedType in
                             CheckedAST.Param(
                                 ident: param.inner.ident.inner,
                                 type: checkedType
@@ -542,7 +480,7 @@ public struct TypeChecker {
                         }
                     }
                 )
-            returnType <- invert(builtinFn.signature.returnType.map(checkType))
+            returnType <- invert(builtinFn.signature.returnType.map(typeContext.checkType))
             return Result<_, [Diagnostic]>.success(
                 CheckedAST.FnSignature(
                     ident: *builtinFn.signature.ident,
@@ -556,7 +494,7 @@ public struct TypeChecker {
 
     private func checkFnSignature(
         _ fn: WithSpan<FnDecl>,
-        _ typeContext: TypeContext
+        _ typeContext: CheckedAST.TypeContext
     ) -> Result<CheckedAST.FnSignature, [Diagnostic]> {
         #result { (params: [CheckedAST.Param], returnType: CheckedAST.TypeIndex?) in
             var seenIdents: [String] = []
@@ -577,7 +515,7 @@ public struct TypeChecker {
                                 ])
                             }
                             seenIdents.append(*param.inner.ident)
-                            checkedType <- checkType(param.inner.type)
+                            checkedType <- typeContext.checkType(param.inner.type)
                             return .success(
                                 CheckedAST.Param(
                                     ident: *param.inner.ident,
@@ -587,7 +525,7 @@ public struct TypeChecker {
                         }
                     })
 
-            returnType <- invert(fn.inner.signature.inner.returnType.map(checkType))
+            returnType <- invert(fn.inner.signature.inner.returnType.map(typeContext.checkType))
 
             return .success(
                 CheckedAST.FnSignature(
@@ -635,18 +573,6 @@ public struct TypeChecker {
                     context.diagnostics
                 )
             )
-        }
-    }
-
-    @discardableResult
-    private func checkType(_ type: WithSpan<Type>) -> Result<CheckedAST.TypeIndex, [Diagnostic]> {
-        let typeName = type.inner.description
-        if let builtinIndex = builtinTypes.firstIndex(where: { $0.ident == typeName }) {
-            return .success(.builtin(builtinIndex))
-        } else if let structIndex = structDecls.firstIndex(where: { *$0.inner.ident == typeName }) {
-            return .success(.struct(structIndex))
-        } else {
-            return .failure([Diagnostic(error: "No such type '\(typeName)'", at: type.span)])
         }
     }
 
@@ -723,7 +649,7 @@ public struct TypeChecker {
                         typeAnnotation: CheckedAST.TypeIndex?,
                         checkedExpr: CheckedAST.Typed<CheckedAST.Expr>
                     ) in
-                    typeAnnotation <- invert(varDecl.type.map(checkType))
+                    typeAnnotation <- invert(varDecl.type.map(context.typeContext.checkType))
 
                     checkedExpr <- checkExpr(varDecl.value, &context)
 
@@ -1017,7 +943,7 @@ public struct TypeChecker {
                             checkedFields: [CheckedAST.Typed<CheckedAST.Expr>]
                         ) in
                         let type = structInit.ident.map(Type.nominal)
-                        typeIndex <- checkType(type)
+                        typeIndex <- context.typeContext.checkType(type)
                         guard case let .struct(structIndex) = typeIndex else {
                             return .failure([
                                 Diagnostic(
@@ -1116,7 +1042,7 @@ public struct TypeChecker {
         _ structInitFields: [WithSpan<StructInitField>],
         _ expectedTypes: [CheckedAST.TypeIndex],
         _ actualTypes: [CheckedAST.TypeIndex],
-        typeContext: TypeContext
+        typeContext: CheckedAST.TypeContext
     ) -> [Diagnostic] {
         var diagnostics: [Diagnostic] = []
         let zipped = zip(structInitFields, zip(actualTypes, expectedTypes))

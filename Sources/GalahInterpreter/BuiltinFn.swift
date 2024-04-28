@@ -280,10 +280,6 @@ public struct BuiltinFn {
             type(of: argument) == T.self,
             "'\(ident)' expects argument 1 to be of type '\(T.self)', got '\(type(of: argument))'"
         )
-        return withUnsafePointer(to: argument) { pointer in
-            pointer.withMemoryRebound(to: T.self, capacity: 1) { pointer in
-                pointer.pointee
-            }
-        }
+        return argument as! T
     }
 }

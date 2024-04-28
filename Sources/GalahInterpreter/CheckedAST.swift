@@ -1,8 +1,124 @@
+import UtilityMacros
+
 public struct CheckedAST {
-    public var builtinTypes: [BuiltinType]
-    public var structs: [Struct]
+    public var typeContext: TypeContext
     public var builtinFns: [BuiltinFn]
     public var fns: [Fn]
+
+    public struct TypeContext {
+        public let builtinTypes: [BuiltinType]
+        public let structs: [CheckedAST.Struct]
+
+        public let void: CheckedAST.TypeIndex
+        public let int: CheckedAST.TypeIndex
+        public let string: CheckedAST.TypeIndex
+
+        public let voidIdent: String
+        public let intIdent: String
+        public let stringIdent: String
+
+        static func create(
+            builtinTypes: [BuiltinType],
+            structs: [CheckedAST.Struct]
+        ) -> Result<TypeContext, [Diagnostic]> {
+            let voidIdent = "Void"
+            let intIdent = "Int"
+            let stringIdent = "String"
+
+            return #result {
+                (
+                    void: CheckedAST.TypeIndex,
+                    int: CheckedAST.TypeIndex,
+                    string: CheckedAST.TypeIndex
+                ) in
+                void <- Self.builtin(named: voidIdent, from: builtinTypes)
+                int <- Self.builtin(named: intIdent, from: builtinTypes)
+                string <- Self.builtin(named: stringIdent, from: builtinTypes)
+                return Result<_, [Diagnostic]>.success(
+                    TypeContext(
+                        builtinTypes: builtinTypes,
+                        structs: structs,
+                        void: void,
+                        int: int,
+                        string: string,
+                        voidIdent: voidIdent,
+                        intIdent: intIdent,
+                        stringIdent: stringIdent
+                    )
+                )
+            }
+        }
+
+        public static func builtin(
+            named name: String,
+            from builtinTypes: [BuiltinType]
+        ) -> Result<CheckedAST.TypeIndex, [Diagnostic]> {
+            guard let index = builtinTypes.firstIndex(where: { $0.ident == name }) else {
+                return .failure([
+                    Diagnostic(
+                        error: "Expected to find builtin type named '\(name)'",
+                        at: .builtin
+                    )
+                ])
+            }
+
+            return .success(.builtin(index))
+        }
+
+        public func describe(_ typeIndex: CheckedAST.TypeIndex) -> String {
+            switch typeIndex {
+                case let .builtin(index):
+                    builtinTypes[index].ident
+                case let .struct(index):
+                    structs[index].ident
+            }
+        }
+
+        public func checkType(
+            _ type: WithSpan<Type>
+        ) -> Result<CheckedAST.TypeIndex, [Diagnostic]> {
+            checkType(type.inner, span: type.span)
+        }
+
+        public func checkType(
+            _ type: Type,
+            span: Span? = nil
+        ) -> Result<CheckedAST.TypeIndex, [Diagnostic]> {
+            Self.checkType(
+                type,
+                span: span,
+                builtinTypeIdents: builtinTypes.lazy.map(\.ident),
+                structIdents: structs.lazy.map(\.ident)
+            )
+        }
+
+        public static func checkType<
+            BuiltinIterator: Sequence<String>, StructIterator: Sequence<String>
+        >(
+            _ type: Type,
+            span: Span?,
+            builtinTypeIdents: BuiltinIterator,
+            structIdents: StructIterator
+        ) -> Result<CheckedAST.TypeIndex, [Diagnostic]> {
+            let typeName = type.description
+            if let builtinIndex = builtinTypeIdents.enumerated().first(where: {
+                $0.element == typeName
+            }).map(\.offset) {
+                return .success(.builtin(builtinIndex))
+            } else if let structIndex = structIdents.enumerated().first(where: {
+                $0.element == typeName
+            }).map(\.offset) {
+                return .success(.struct(structIndex))
+            } else {
+                let message = "No such type '\(typeName)'"
+                if let span {
+                    return .failure([Diagnostic(error: message, at: span)])
+                } else {
+                    return .failure([Diagnostic(error: message, at: nil)])
+                }
+            }
+        }
+    }
 
     public struct Typed<Inner> {
         public var inner: Inner
