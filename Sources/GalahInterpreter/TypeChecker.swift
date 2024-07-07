@@ -544,7 +544,7 @@ public struct TypeChecker {
     ) -> Result<WithDiagnostics<CheckedAST.Fn>, [Diagnostic]> {
         #result { (analyzedStmts: Analyzed<[CheckedAST.Stmt]>) in
             let span = fn.span
-            let fn = *fn
+            let fnInner = *fn
 
             var context = FnContext(
                 globalContext: globalContext,
@@ -554,8 +554,8 @@ public struct TypeChecker {
                 context.newLocal(param.ident, type: param.type)
             }
 
-            analyzedStmts <- checkStmts(fn.stmts, &context)
-            let returnType = fn.signature.inner.returnType?.inner ?? .void
+            analyzedStmts <- checkStmts(fnInner.stmts, &context)
+            let returnType = fnInner.signature.inner.returnType?.inner ?? .void
             guard returnType == .void || analyzedStmts.returnsOnAllPaths else {
                 // TODO: Attach the diagnostic to the last statement in each offending path
                 return .failure([
