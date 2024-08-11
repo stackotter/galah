@@ -5,8 +5,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swiftwasm/carton",
       "state" : {
-        "revision" : "85fa55e4f9cbfa68d37dc7050ba7952fed300a2c",
-        "version" : "1.0.3"
+        "revision" : "d3f1da61faa05283e46a05698ac9bea46fd1035f",
+        "version" : "1.1.2"
       }
     },
     {
@@ -14,8 +14,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/swiftwasm/JavaScriptKit",
       "state" : {
-        "revision" : "2d7bc960eed438dce7355710ece43fa004bbb3ac",
-        "version" : "0.15.0"
+        "revision" : "bfaba41ab62aaa89080f9d467eb68497e77a8a10",
+        "version" : "0.20.0"
       }
     },
     {
@@ -59,8 +59,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/stackotter/swift-macro-toolkit",
       "state" : {
-        "revision" : "106daeb38eb3f52b1540aed981fc63fa22274576",
-        "version" : "0.3.1"
+        "revision" : "687075e7bf976e121d083e922a07c7a9350ca85d",
+        "version" : "0.4.0"
       }
     },
     {
@@ -77,8 +77,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-syntax.git",
       "state" : {
-        "revision" : "74203046135342e4a4a627476dd6caf8b28fe11b",
-        "version" : "509.0.0"
+        "revision" : "2bc86522d115234d1f588efe2bcb4ce4be8f8b82",
+        "version" : "510.0.3"
       }
     },
     {

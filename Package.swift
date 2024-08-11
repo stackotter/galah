@@ -35,14 +35,14 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
         .package(
             url: "https://github.com/apple/swift-syntax.git",
-            from: "509.0.0"
+            from: "510.0.3"
         ),
         .package(
             url: "https://github.com/stackotter/swift-macro-toolkit",
-            from: "0.3.1"
+            from: "0.4.0"
         ),
-        .package(url: "https://github.com/swiftwasm/carton", from: "1.0.0"),
-        .package(url: "https://github.com/swiftwasm/JavaScriptKit", exact: "0.15.0"),
+        .package(url: "https://github.com/swiftwasm/carton", from: "1.1.2"),
+        .package(url: "https://github.com/swiftwasm/JavaScriptKit", exact: "0.20.0"),
     ],
     targets: [
         .executableTarget(

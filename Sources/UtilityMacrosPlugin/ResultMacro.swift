@@ -112,7 +112,7 @@ public struct ResultMacro: ExpressionMacro {
         of node: some FreestandingMacroExpansionSyntax,
         in context: some MacroExpansionContext
     ) throws -> ExprSyntax {
-        guard node.argumentList.isEmpty, node.additionalTrailingClosures.isEmpty else {
+        guard node.arguments.isEmpty, node.additionalTrailingClosures.isEmpty else {
             throw MacroError("#result expects a single trailing closure")
         }
 
@@ -140,8 +140,7 @@ public struct ResultMacro: ExpressionMacro {
         let rewriter = ArrowSyntaxRewriter(context: context, contextVariables: contextVariables)
         closure.statements = rewriter.rewrite(closure.statements, detach: true).as(
             CodeBlockItemListSyntax.self)!
-        closure.signature?.parameterClause = ClosureParameterClauseSyntax.init(parameters: [])
-            .as(ClosureSignatureSyntax.ParameterClause.self)
+        closure.signature?.parameterClause = ClosureSignatureSyntax.ParameterClause.parameterClause(.init(parameters: []))
 
         guard rewriter.diagnostics.isEmpty else {
             for diagnostic in rewriter.diagnostics {
