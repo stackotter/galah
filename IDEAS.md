@@ -85,3 +85,9 @@ From my experience with generics in the SwiftCrossUI project, I've found that it
 for conformances to silently become stale when default implementations are available which can
 cause some pretty subtle bugs. If `impl` blocks for conformances can only define members
 satisfying the conformance requirements then this whole source of bugs is eliminated.
+
+## A first-class way to collect stacktraces using `Result`-based error handling
+
+This could possibly be implemented by having a trait that you can implement to get a method called
+on your struct whenever it's the return value of a function. This would work in most cases but could
+be annoying if you try and nest the error within another error.
