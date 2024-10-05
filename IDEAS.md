@@ -73,7 +73,7 @@ enum OSVersion {
   case windows(MSVersion)
 }
 
-enum OS = kind OSVersion // syntax needs work
+typealias OS = OSVersion.Kind
 
 let version: OSVersion = .macOS(SemVer(11, 2, 5))
 let os = OS(version) // OS.macOS
@@ -90,4 +90,15 @@ satisfying the conformance requirements then this whole source of bugs is elimin
 
 This could possibly be implemented by having a trait that you can implement to get a method called
 on your struct whenever it's the return value of a function. This would work in most cases but could
-be annoying if you try and nest the error within another error.
+be annoying if you try and nest the error within another error. Maybe structs can auto-implement the
+trait when one of their fields implements it? It'd be interesting to have a way for users to define
+a 'viral' interface that propagates up to enclosing types with a default implementation.
+
+## Testing
+
+It'd be pretty awesome to be able to have a system that only reruns tests that would've been affected
+by the changes made since the last time they were run.
+
+## Make panics catchable out of the box (e.g. index out of bounds etc.)?
+
+Could get abused by exception lovers to avoid value-based error handling though.
