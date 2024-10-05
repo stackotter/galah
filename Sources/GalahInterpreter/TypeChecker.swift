@@ -67,11 +67,29 @@ public struct TypeChecker {
             _ argumentTypes: [CheckedAST.TypeIndex],
             span: Span
         ) -> Result<ResolvedFnCall, [Diagnostic]> {
-            guard
-                let (id, signature) = fns.first(where: { (id, signature) in
-                    signature.ident == *ident && signature.params.map(\.type) == argumentTypes
-                })
-            else {
+            if let (id, signature) = fns.first(where: { (id, signature) in
+                signature.ident == *ident && signature.params.map(\.type) == argumentTypes
+            }) {
+                return .success(
+                    ResolvedFnCall(
+                        id: id,
+                        returnType: signature.returnType
+                    )
+                )
+            } else if let (index, structType) = typeContext.structs.enumerated().first(where: {
+                $0.element.ident == *ident
+            }) {
+                guard structType.fields.map(\.type) == argumentTypes else {
+                    return .failure([])
+                }
+                return .success(
+                    ResolvedFnCall(
+                        id: .constructor(structIndex: index),
+                        returnType: .struct(index)
+                    )
+                )
+            } else {
+                // Generate a nice error message
                 let parameters = argumentTypes.map(typeContext.describe).joined(separator: ", ")
                 let alternativesCount = fns.filter { $0.1.ident == *ident }.count
                 let additionalContext =
@@ -89,12 +107,6 @@ public struct TypeChecker {
                 ])
             }
 
-            return .success(
-                ResolvedFnCall(
-                    id: id,
-                    returnType: signature.returnType
-                )
-            )
         }
     }
 

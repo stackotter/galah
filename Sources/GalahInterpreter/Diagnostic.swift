@@ -144,7 +144,7 @@ extension [WithDiagnostics<CheckedAST.Fn>] {
     }
 }
 
-extension [Diagnostic]: Error {}
+extension [Diagnostic]: @retroactive Error {}
 
 protocol Foldable<Element>: Error {
     associatedtype Element

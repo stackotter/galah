@@ -92,13 +92,11 @@ public struct CheckedAST {
             )
         }
 
-        public static func checkType<
-            BuiltinIterator: Sequence<String>, StructIterator: Sequence<String>
-        >(
+        public static func checkType(
             _ type: Type,
             span: Span?,
-            builtinTypeIdents: BuiltinIterator,
-            structIdents: StructIterator
+            builtinTypeIdents: some Sequence<String>,
+            structIdents: some Sequence<String>
         ) -> Result<CheckedAST.TypeIndex, [Diagnostic]> {
             let typeName = type.description
             if let builtinIndex = builtinTypeIdents.enumerated().first(where: {
@@ -217,6 +215,7 @@ public struct CheckedAST {
     public enum FnId {
         case builtin(index: Int)
         case userDefined(index: Int)
+        case constructor(structIndex: Int)
     }
 
     public struct FnCallExpr {

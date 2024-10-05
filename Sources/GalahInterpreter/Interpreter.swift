@@ -227,6 +227,8 @@ public struct Interpreter {
                         return try ast.builtinFns[index].call(with: arguments)
                     case let .userDefined(index):
                         return try evaluate(ast.fns[index], arguments: arguments)
+                    case .constructor:
+                        return arguments
                 }
             case let .localVar(index):
                 return locals[index]
