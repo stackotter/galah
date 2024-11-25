@@ -102,3 +102,11 @@ by the changes made since the last time they were run.
 ## Make panics catchable out of the box (e.g. index out of bounds etc.)?
 
 Could get abused by exception lovers to avoid value-based error handling though.
+
+## Auto conflict resolution
+
+If the interpreter understood Git conflict markers than it'd be possible to get it to build
+and test a merge-conflict-ridden project with various combinations of resolutions in an
+attempt to fix the trivially solvable conflicts. This would require the developer to manually
+resolve any merge conflicts in the test code first so that the tests can be used as a source
+of truth.
